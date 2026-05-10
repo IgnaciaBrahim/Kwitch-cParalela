@@ -5,6 +5,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.net.SocketException;
+import java.util.List;
 import java.util.Scanner;
 
 /**
@@ -31,18 +32,22 @@ public class ViewerClient {
     public void start(Scanner scanner) {
         try {
             System.out.println("\n--- BIENVENIDO A KWITCH ---");
-            System.out.print("Nombre del canal al que desea unirse: ");
+            
+            // 1. Funcionalidad: Ver canales activos antes de unirse
+            fetchActiveChannels();
+            
+            System.out.print("\nNombre del canal al que desea unirse: ");
             this.targetChannel = scanner.nextLine();
 
-            // 1. Iniciamos la escucha del StreamServer en un hilo separado
+            // 2. Iniciamos la escucha del StreamServer en un hilo separado
             Thread streamListener = new Thread(this::connectToStreamServer);
             streamListener.setDaemon(true);
             streamListener.start();
 
-            // 2. Iniciamos la conexión al ChatServer
+            // 3. Iniciamos la conexión al ChatServer
             setupChat();
 
-            // 3. Bucle principal para el envío de mensajes de chat
+            // 4. Bucle principal para el envío de mensajes de chat
             System.out.println("\nSistema listo. Escriba su mensaje y presione Enter.");
             System.out.println("(Escriba 'SALIR' para cerrar la aplicación)\n");
 
@@ -65,15 +70,44 @@ public class ViewerClient {
         }
     }
 
+    private void fetchActiveChannels() {
+        System.out.println("Buscando canales activos...");
+        try (Socket socket = new Socket(HOST, STREAM_PORT)) {
+            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+            out.flush();
+            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+
+            // Comando para solicitar la lista
+            out.writeObject("LIST_CHANNELS");
+            out.flush();
+
+            Object response = in.readObject();
+            if (response instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<String> channels = (List<String>) response;
+                
+                if (channels.isEmpty()) {
+                    System.out.println("[-] No hay canales transmitiendo en este momento.");
+                } else {
+                    System.out.println("[+] Canales disponibles:");
+                    for (String ch : channels) {
+                        System.out.println("    - " + ch);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[-] No se pudo obtener la lista (Stream Server inactivo).");
+        }
+    }
+
     private void connectToStreamServer() {
-        // Lógica de reintentos en caso de que el servidor no esté activo aún
         while (true) {
             try (Socket streamSocket = new Socket(HOST, STREAM_PORT)) {
                 ObjectOutputStream out = new ObjectOutputStream(streamSocket.getOutputStream());
                 out.flush();
                 ObjectInputStream in = new ObjectInputStream(streamSocket.getInputStream());
 
-                // Según el ClientHandler, el primer mensaje debe ser un String con el nombre del canal
+                // Suscripción al canal
                 out.writeObject(targetChannel);
                 out.flush();
 
@@ -96,18 +130,15 @@ public class ViewerClient {
     }
 
     private void handleServerNotification(ServerResponse res) {
-        // Si hay un error (ej: canal no existe), lo mostramos y cerramos
         if (res.getStatus() == ResponseStatus.ERROR) {
             System.err.println("\n[ERROR] " + res.getMessage());
             System.exit(0);
         }
 
-        // Si el estado es CHANNEL_CLOSED, informamos al usuario
         if (res.getStatus() == ResponseStatus.CHANNEL_CLOSED) {
             System.out.println("\n[INFO] El streamer ha finalizado la transmisión.");
         }
 
-        // Actualización de datos del stream (vistas, estado, etc.)
         if (res.getPayload() != null) {
             StreamSession session = res.getPayload();
             System.out.println("\n>>> UPDATE: Canal '" + session.getChannelName() + 
@@ -123,17 +154,14 @@ public class ViewerClient {
             chatOut.flush();
             ObjectInputStream chatIn = new ObjectInputStream(chatSocket.getInputStream());
 
-            // Mensaje inicial para registrarse en el canal del chat
             chatOut.writeObject(new ChatMessage(username, targetChannel, "se ha unido al chat."));
             chatOut.flush();
 
-            // Hilo para recibir mensajes de otros usuarios (Broadcast)
             Thread chatReader = new Thread(() -> {
                 try {
                     while (true) {
                         Object obj = chatIn.readObject();
                         if (obj instanceof ChatMessage msg) {
-                            // Imprimimos el mensaje formateado
                             System.out.println(msg.toString());
                         }
                     }
@@ -154,7 +182,7 @@ public class ViewerClient {
             ChatMessage msg = new ChatMessage(username, targetChannel, content);
             chatOut.writeObject(msg);
             chatOut.flush();
-            chatOut.reset(); // Importante para no enviar objetos cacheados
+            chatOut.reset(); 
         } catch (IOException e) {
             System.err.println("[Chat] Error al enviar mensaje.");
         }
@@ -169,7 +197,6 @@ public class ViewerClient {
     }
 
     public static void main(String[] args) {
-        // try-with-resources asegura el cierre del Scanner y de System.in al finalizar el programa
         try (Scanner scanner = new Scanner(System.in)) {
             System.out.print("Ingrese su nombre de usuario: ");
             String name = scanner.nextLine();
