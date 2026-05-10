@@ -10,14 +10,36 @@ import java.net.SocketException;
 import java.util.Arrays;
 import java.util.Scanner;
 
+//objetivo
+
+/*el StreamerClient es la interfaz del streamer. Es el proceso que representa al usuario que va a 
+transmitir en Kwitch.
+
+Primero establece el canal: recoge los datos del stream por consola (nombre del canal, descripción,
+app, tags), crea un objeto StreamSession y lo envía al StreamServer para registrar el canal como 
+activo.
+
+Luego gestiona el estado del canal: presenta un menú en la consola con las opciones de pausar, 
+reanudar y cerrar. Cada vez que el streamer elige una opción, actualiza el estado de la StreamSession
+y la envía al servidor, que se encarga de notificar a todos los espectadores suscritos.
+
+También puede recibir actualizaciones del servidor: corre un hilo listener en paralelo que escucha 
+notificaciones del servidor, principalmente el viewerCount actualizado cada vez que un espectador se
+conecta o desconecta. Así el streamer puede ver en tiempo real cuántas personas están viendo su canal
+sin interrumpir el menú de control. 
+
+*/
+
 public class StreamerClient {
 
     private static final String HOST = "localhost";
     private static final int PORT = 5000;
 
     public static void main(String[] args) throws Exception{
+
         try (Scanner scanner = new Scanner(System.in)) {
-            System.out.println("=== Kwitch — Streamer Console ===");
+            //esto hace el setup inicial del canal
+            System.out.println("=== Kwitch Streamer: Vista Consola ===");
             System.out.print("Tu ID de streamer: ");
             String streamerId = scanner.nextLine();
 
@@ -27,51 +49,63 @@ public class StreamerClient {
             System.out.print("Descripción: ");
             String description = scanner.nextLine();
 
-            System.out.print("App que estás mostrando: ");
+            System.out.print("App que estás mostrando (ej: League of Legends): ");
             String currentApp = scanner.nextLine();
 
-            System.out.print("Tags (separados por coma): ");
-            String[] tagsArray = scanner.nextLine().split(",");
+            System.out.print("Tags (separados por coma, como 'ARAM': ");
+            //tag separados
+            String[] tagsArray = scanner.nextLine().split(","); 
             var tags = Arrays.asList(tagsArray);
 
             try (Socket socket = new Socket(HOST, PORT)) {
-                // OOS antes que OIS
+                //out antes que el in (no deadlock)
                 ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
                 ObjectInputStream  in  = new ObjectInputStream(socket.getInputStream());
 
                 // Crear y enviar sesión inicial
-                StreamSession session = new StreamSession(
-                    streamerId, channelName, description, currentApp, tags
+                StreamSession session = new StreamSession(streamerId, channelName, description, 
+                                                                            currentApp, tags
                 );
                 out.writeObject(session);
+                //header
                 out.flush();
 
-                // Leer confirmación del servidor
+                //lee la confirmacion del server, el response.
                 ServerResponse response = (ServerResponse) in.readObject();
                 System.out.println("\n[Servidor] " + response.getMessage());
                 System.out.println("[Servidor] Estado: " + response.getStatus());
 
-                // Hilo separado para recibir actualizaciones del servidor (viewerCount)
+                //abre un thread para escuchar las notificaciones del server 
                 Thread listener = new Thread(() -> {
                     try {
                         while (true) {
                             ServerResponse update = (ServerResponse) in.readObject();
                             StreamSession payload = update.getPayload();
+                            //si hay payload entonces hay cambios (!=null)
                             if (payload != null) {
                                 System.out.println("\n[Actualización] Espectadores: "
                                     + payload.getViewerCount());
                             }
                         }
-                    } catch (EOFException | SocketException e) {
+                    } catch (SocketException | EOFException e) {
                         System.out.println("[Streamer] Conexión cerrada.");
+                        Thread.currentThread().interrupt(); //se comunica la interrupcion
                     } catch (IOException | ClassNotFoundException e) {
                         System.err.println("[Streamer] Error en listener: " + e.getMessage());
                     }
                 });
+
+                //IMPORTANTE:
+                /*el listener es un hilo "daemon", es decir, es de soporte. No debe impedir que el
+                sistema de stream termine, pero si este termina, debe morir con el y no seguir
+                esperando mas actualizaciones.
+
+                */
+               //el setter
                 listener.setDaemon(true);
                 listener.start();
 
-                // Menú principal
+                //menu de opciones luego de la confirmacion del servidor
                 boolean running = true;
                 while (running) {
                     System.out.println("\n--- Opciones ---");
@@ -103,6 +137,7 @@ public class StreamerClient {
                             out.flush();
                             out.reset();
                             System.out.println("[Streamer] Canal cerrado.");
+                            //se muere
                             running = false;
                         }
                         default -> System.out.println("Opción no válida.");

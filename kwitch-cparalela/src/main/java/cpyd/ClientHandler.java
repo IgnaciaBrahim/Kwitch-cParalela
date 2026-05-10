@@ -7,6 +7,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -48,7 +49,10 @@ public class ClientHandler implements Runnable {
         try {
             //el out se crea antes que el in para evitar fallos por deadlock
             //si no el cliente espera para siempre un mensaje que no va a llegar.
+            socket.setSoTimeout(180000); //tiene timeout para echarle si no escucha nada del cliente
             out = new ObjectOutputStream(socket.getOutputStream());
+            //no deadlock por header!
+            out.flush();
             in  = new ObjectInputStream(socket.getInputStream());
 
             //El primer mensaje determina si es streamer o viewer o si solicita lista de canales
@@ -67,7 +71,6 @@ public class ClientHandler implements Runnable {
                     out.writeObject(channels);
                     out.flush();
                     // Termina la ejecución para que el bloque finally cierre este socket temporal
-                    return; 
                 } else {
                     // Si no es LIST_CHANNELS, asume que es el nombre del canal para suscribirse
                     role = "VIEWER";
@@ -77,6 +80,10 @@ public class ClientHandler implements Runnable {
 
         } catch (SocketException | EOFException e) {
             System.out.println("[ClientHandler] El cliente se ha desconectado abruptamente.");
+        } catch (SocketTimeoutException e) {
+            //luego del timeout
+            System.out.println("[Streamer] Conexión cerrada.");
+            Thread.currentThread().interrupt();
         } catch (IOException | ClassNotFoundException e) {
             System.err.println("[ClientHandler] Error en cliente: " + e.getMessage());
         } catch (Exception e) {
@@ -85,7 +92,9 @@ public class ClientHandler implements Runnable {
         } finally {
             cleanup();
         }
+
     }
+
 
     //la logica del steamer
     private void handleStreamer(StreamSession session) throws IOException, ClassNotFoundException {
@@ -159,7 +168,7 @@ public class ClientHandler implements Runnable {
                     Thread.sleep(3000);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    break; // salir del loop si el hilo fue interrumpido
+                    break; //salir del loop si el hilo fue interrumpido
                 }
             }
         } catch (Exception e) {
