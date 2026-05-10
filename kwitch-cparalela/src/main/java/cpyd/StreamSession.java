@@ -19,13 +19,13 @@ espectadores reciben cuando se suscriben.
 public class StreamSession implements Serializable {
     private static final long serialVersionUID = 1L;
 
-    private String streamerId;
-    private String channelName;
-    private String description;
+    private final String streamerId;
+    private final String channelName;
+    private final String description;
     private String currentApp;
-    private List<String> tags;
+    private final List<String> tags;
     private StreamStatus status;
-    private LocalDateTime startTime;
+    private final LocalDateTime startTime;
     private int viewerCount;
 
     public StreamSession(String streamerId, String channelName,

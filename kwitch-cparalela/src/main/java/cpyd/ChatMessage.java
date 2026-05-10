@@ -6,10 +6,10 @@ public class ChatMessage implements Serializable {
     
     private static final long serialVersionUID = 1L;
     
-    private String user;
-    private String channelId;
-    private String content;
-    private long timestamp;
+    private final String user;
+    private final String channelId;
+    private final String content;
+    private final long timestamp;
 
     public ChatMessage(String user, String channelId, String content) {
         this.user = user;
