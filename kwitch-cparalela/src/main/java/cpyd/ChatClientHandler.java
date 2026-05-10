@@ -33,8 +33,7 @@ public class ChatClientHandler implements Runnable {
             in = new ObjectInputStream(socket.getInputStream());
 
             Object obj = in.readObject();
-            if (obj instanceof ChatMessage) {
-                ChatMessage initialMsg = (ChatMessage) obj;
+            if (obj instanceof ChatMessage initialMsg) {
                 currentChannel = initialMsg.getChannelId();
                 server.addClientToChannel(currentChannel, this);
                 broadcast(initialMsg); 
@@ -42,8 +41,8 @@ public class ChatClientHandler implements Runnable {
 
             while (true) {
                 Object msgObj = in.readObject();
-                if (msgObj instanceof ChatMessage) {
-                    broadcast((ChatMessage) msgObj);
+                if (msgObj instanceof ChatMessage chatMessage) {
+                    broadcast(chatMessage);
                 }
             }
             

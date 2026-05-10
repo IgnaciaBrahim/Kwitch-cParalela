@@ -1,5 +1,6 @@
 package cpyd;
 
+import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
@@ -55,19 +56,17 @@ public class ViewerClient {
                 out.flush();
                 ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
 
-                // MODIFICAR DESPUES DE QUE LA CLASE STREAMSERVER ESTE COMPLETA
-                out.writeObject("SUBSCRIBE:" + currentChannel);
+                //MOD: DONE
+                out.writeObject(currentChannel);
                 out.flush();
 
                 while (true) {
                     Object obj = in.readObject();
-                    if (obj instanceof StreamSession) {
-                        StreamSession session = (StreamSession) obj;
+                    if (obj instanceof StreamSession session) {
                         System.out.println("\n[STREAM UPDATE] Estado: " + session.getStatus());
-                    } else if (obj instanceof ServerResponse) {
-                        ServerResponse response = (ServerResponse) obj;
+                    } else if (obj instanceof ServerResponse response) {
                         System.out.println("\n[SERVER] " + response.getMessage());
-                        if ("CHANNEL_CLOSED".equals(response.getMessage())) {
+                        if (response.getStatus() == ResponseStatus.CHANNEL_CLOSED) {
                             System.out.println("\nTransmisión finalizada por el streamer.");
                             System.exit(0);
                         }
@@ -75,7 +74,12 @@ public class ViewerClient {
                 }
             } catch (Exception e) {
                 System.err.println("\n[Alerta] Buscando Stream Server en puerto " + STREAM_SERVER_PORT + "... (Reintento en 3s)");
-                try { Thread.sleep(3000); } catch (InterruptedException ignored) {}
+                try {
+                    Thread.sleep(3000);
+                } catch (InterruptedException ine) {
+                    Thread.currentThread().interrupt();
+                    break; // salir del loop si el hilo fue interrumpido
+                }
             }
         }
     }
@@ -96,20 +100,19 @@ public class ViewerClient {
 
                 while (true) {
                     Object obj = chatIn.readObject();
-                    if (obj instanceof ChatMessage) {
-                        ChatMessage msg = (ChatMessage) obj;
+                    if (obj instanceof ChatMessage msg) {
                         // Hilo de lectura continua para el chat
                         System.out.println("\r" + msg.toString());
                     }
                 }
-            } catch (Exception e) {
+            } catch (IOException | ClassNotFoundException e) {
                 System.err.println("\n[Alerta] Desconectado del Chat Server.");
             } finally {
                 // Limpieza forzosa de la conexión al terminar el hilo
                 try {
                     if (chatOut != null) chatOut.close();
                     if (chatSocket != null && !chatSocket.isClosed()) chatSocket.close();
-                } catch (Exception ignored) {}
+                } catch (IOException ignored) {}
             }
         });
         chatListener.start();
@@ -120,12 +123,12 @@ public class ViewerClient {
             ChatMessage message = new ChatMessage(username, currentChannel, content);
             chatOut.writeObject(message);
             chatOut.flush();
-        } catch (Exception e) {
+        } catch (IOException e) {
             System.err.println("Error de red al enviar el mensaje.");
         }
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception{
     // try-with-resources cierra el scanner automáticamente al finalizar
     try (Scanner scanner = new Scanner(System.in)) {
         System.out.print("Ingrese su nombre de usuario: ");

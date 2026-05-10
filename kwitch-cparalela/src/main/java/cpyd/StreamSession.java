@@ -9,7 +9,9 @@ import java.util.List;
 
 /*es el objeto principal que viaja por el socket desde el Streamer hacia el servidor. Encapsula toda
 la información de un canal activo: quién lo abre, cómo se llama, qué está mostrando, y en qué 
-estado está. Es lo que el servidor registra cuando un streamer inicia un canal, y lo que los 
+estado está. 
+
+Es lo que el servidor registra cuando un streamer inicia un canal, y lo que los 
 espectadores reciben cuando se suscriben.
 
  */

@@ -12,8 +12,8 @@ Tiene tres campos: el status (si salió bien o mal), un mensaje para mostrar en
 consola, y un payload que es la StreamSession actualizada cuando el servidor tiene algo 
 que devolver:
 
-    por ejemplo: cuando un espectador se suscribe y el servidor le envía el estado actual 
-    del canal. 
+por ejemplo: cuando un espectador se suscribe y el servidor le envía el estado actual 
+del canal. 
 
 El payload puede ser null, como cuando el servidor simplemente confirma que recibió 
 algo. 
@@ -27,9 +27,9 @@ public class ServerResponse implements Serializable {
     */
     private static final long serialVersionUID = 1L; 
 
-    private ResponseStatus status;  //estado actual 
-    private String message; //mensajes
-    private StreamSession payload;  //puede ser null: cuando el servidor responde un error no tiene 
+    private final ResponseStatus status;  //estado actual 
+    private final String message; //mensajes
+    private final StreamSession payload;  //puede ser null: cuando el servidor responde un error no tiene 
                                     // sesión que devolver. 
 
     //constructor
