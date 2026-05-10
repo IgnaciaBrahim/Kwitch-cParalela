@@ -7,6 +7,8 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.net.SocketException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 //objetivo
@@ -20,7 +22,6 @@ actualizaciones de estado. Si es espectador, lo suscribe al canal y queda espera
 
 Finalmente limpia cuando el cliente se desconecta para que no queden guardados clientes que ya no 
 estan conectados, sin importar cómo ocurrió esa desconexión.
-
 */
 
 //no va a extender thread ya que es más util que extienda otros objetos si es necesario.
@@ -50,7 +51,7 @@ public class ClientHandler implements Runnable {
             out = new ObjectOutputStream(socket.getOutputStream());
             in  = new ObjectInputStream(socket.getInputStream());
 
-            //El primer mensaje determina si es streamer o viewer
+            //El primer mensaje determina si es streamer o viewer o si solicita lista de canales
             Object first = in.readObject();
 
             if (first instanceof StreamSession session) {
@@ -59,9 +60,19 @@ public class ClientHandler implements Runnable {
                 role = "STREAMER";
                 handleStreamer(session);
 
-            } else if (first instanceof String channelRequest) {
-                role = "VIEWER";
-                handleViewer(channelRequest);
+            } else if (first instanceof String request) {
+                if ("LIST_CHANNELS".equals(request)) {
+                    // El cliente solo quiere ver los canales. Se envían las llaves del mapa.
+                    List<String> channels = new ArrayList<>(StreamServer.activeSessions.keySet());
+                    out.writeObject(channels);
+                    out.flush();
+                    // Termina la ejecución para que el bloque finally cierre este socket temporal
+                    return; 
+                } else {
+                    // Si no es LIST_CHANNELS, asume que es el nombre del canal para suscribirse
+                    role = "VIEWER";
+                    handleViewer(request);
+                }
             }
 
         } catch (SocketException | EOFException e) {
@@ -109,7 +120,7 @@ public class ClientHandler implements Runnable {
             broadcast(channel, update);
 
             System.out.println("[StreamServer] El estado fue actualizado en '" + channel + "': " + 
-                                                                    update.getStatus());
+                                                                                update.getStatus());
             //se ve si el estado es que terminó
             if (update.getStatus() == StreamStatus.ENDED) break;
         }
@@ -124,7 +135,7 @@ public class ClientHandler implements Runnable {
         //solo hay mensaje, no hay payload
         if (!StreamServer.activeSessions.containsKey(channelName)) {
             send(new ServerResponse(ResponseStatus.ERROR, "Canal no encontrado: " + channelName, 
-                                                                            null));
+                                                                                                null));
             return;
         }
 
@@ -179,7 +190,7 @@ public class ClientHandler implements Runnable {
         }
         ServerResponse notification = new ServerResponse(update.getStatus() == StreamStatus.ENDED
                 ? ResponseStatus.CHANNEL_CLOSED : ResponseStatus.OK, "Actualización del canal: " 
-                                                                        + channel, update);
+                                                                                + channel, update);
 
         for (ClientHandler viewer : viewers) {
             viewer.send(notification);
