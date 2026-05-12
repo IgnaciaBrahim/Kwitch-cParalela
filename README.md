@@ -1,6 +1,6 @@
 # Kwitch
 
-Plataforma de streaming distribuida inspirada en Twitch, desarrollada en Java puro con sockets TCP. Proyecto universitario para el curso ICI-4344 Computación Paralela y Distribuida.
+Plataforma de streaming distribuida inspirada en Twitch, desarrollada en Java puro con sockets TCP. Proyecto universitario para el ramo ICI-4344 Computación Paralela y Distribuida.
 
 ## Funciones principales
 
@@ -19,9 +19,6 @@ Dos servidores independientes corren en paralelo:
 | `StreamerClient` | — | Controla el stream y participa en el chat |
 | `ViewerClient` | — | Se suscribe al stream y participa en el chat |
 
-La comunicación usa **serialización Java** (`ObjectInputStream` / `ObjectOutputStream`) para enviar objetos complejos (`StreamSession`, `ChatMessage`, `ServerResponse`) entre procesos.
-
-La concurrencia se maneja con `ConcurrentHashMap`, `CopyOnWriteArrayList` y un `ExecutorService` (thread pool), un hilo por cliente.
 
 ## Cómo ejecutar
 
