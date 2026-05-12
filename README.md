@@ -1,27 +1,50 @@
 # Kwitch
-Proyecto universitario que implementa una versión simplificada de una plataforma Twitch-inspired, desarrollado en Java con enfoque en sistemas distribuidos de bajo nivel incorporando frameworks como Spark.
 
-`Funcionalidad 1: Stream - Servidor - Usuario`
+Plataforma de streaming distribuida inspirada en Twitch, desarrollada en Java puro con sockets TCP. Proyecto universitario para el curso ICI-4344 Computación Paralela y Distribuida.
 
-Cada Streamer puede abrir su transmisión/canal (StreamSession), que luego va a viajar del cliente al servidor. La respuesta del servidor (ServerResponse) viaja del servidor al cliente, y las dos clases de definición de estado de las operaciones (Stream/Response Status) son los mensajes que usan ambos para entenderse.
+## Funciones principales
 
-## --> Organización:
-### La base:
+**1. Streaming en vivo** — Un streamer abre un canal y transmite su estado (LIVE / PAUSED / ENDED). Los espectadores se suscriben y reciben actualizaciones en tiempo real mediante broadcast.
 
-- Modelo físico (diagrama) (Hecho)
-- Diagrama de secuencia — Función 1 (Hecho)
-- Clases base: StreamSession, ServerResponse, StreamStatus, ResponseStatus (Hecho)
+**2. Chat en vivo** — Sistema de chat multicanal donde streamers y espectadores pueden enviarse mensajes en tiempo real dentro del mismo canal.
 
-### Implementación Función 1
+## Arquitectura
 
-`Clases`
-- StreamServer.java — ServerSocket, ciclo de aceptación, Thread-per-client (Hecho)
-- ClientHandler.java — hilo dedicado por cliente, deserialización, lógica por tipo de cliente (Hecho)
-- StreamerClient.java — consola del streamer, envío de sesión, cambio de estados (Pend)
-- ViewerClient.java — suscripción al canal, recepción de notificaciones (Pend)
+Dos servidores independientes corren en paralelo:
 
-`Informe`
-- 1.1 Fundamentación y Teoría: concurrencia, fallos, transparencia (con ejemplos del código) (Pend)
-- 1.2 Modelado de Ingeniería: modelo físico, diagrama de secuencia (Hecho) 
-  Modelo arquitectónico (Pend), diagrama de secuencia F2 (NA)
-- 1.3 Análisis Fundamental: modelo de seguridad, modelo de fallos (crash y omisión) (Pend)
+| Componente | Puerto | Rol |
+|---|---|---|
+| `StreamServer` | 5000 | Gestiona canales activos y notifica a suscriptores |
+| `ChatServer` | 6000 | Distribuye mensajes de chat por canal |
+| `StreamerClient` | — | Controla el stream y participa en el chat |
+| `ViewerClient` | — | Se suscribe al stream y participa en el chat |
+
+La comunicación usa **serialización Java** (`ObjectInputStream` / `ObjectOutputStream`) para enviar objetos complejos (`StreamSession`, `ChatMessage`, `ServerResponse`) entre procesos.
+
+La concurrencia se maneja con `ConcurrentHashMap`, `CopyOnWriteArrayList` y un `ExecutorService` (thread pool), un hilo por cliente.
+
+## Cómo ejecutar
+
+Abrir 5 terminales en la raíz del proyecto y ejecutar en orden:
+
+**1. StreamServer**
+```
+java -cp kwitch-cparalela\target\classes cpyd.StreamServer
+```
+
+**2. ChatServer**
+```
+java -cp kwitch-cparalela\target\classes cpyd.ChatServer
+```
+
+**3. StreamerClient**
+```
+java -cp kwitch-cparalela\target\classes cpyd.StreamerClient
+```
+
+**4 y 5. ViewerClient** (una terminal por espectador)
+```
+java -cp kwitch-cparalela\target\classes cpyd.ViewerClient
+```
+
+> Compilar antes con Maven: `mvn compile` dentro de `kwitch-cparalela/`
