@@ -182,7 +182,8 @@ public class ViewerClient {
             ChatMessage msg = new ChatMessage(username, targetChannel, content);
             chatOut.writeObject(msg);
             chatOut.flush();
-            chatOut.reset(); 
+            chatOut.reset();
+            System.out.println(msg.toString());
         } catch (IOException e) {
             System.err.println("[Chat] Error al enviar mensaje.");
         }

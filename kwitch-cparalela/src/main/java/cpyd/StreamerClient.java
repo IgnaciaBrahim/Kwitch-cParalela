@@ -105,6 +105,32 @@ public class StreamerClient {
                 listener.setDaemon(true);
                 listener.start();
 
+                // Chat: conexión al ChatServer para leer y escribir mensajes del canal
+                ObjectOutputStream chatOut = null;
+                try {
+                    Socket chatSocket = new Socket(HOST, 6000);
+                    chatOut = new ObjectOutputStream(chatSocket.getOutputStream());
+                    chatOut.flush();
+                    ObjectInputStream chatIn = new ObjectInputStream(chatSocket.getInputStream());
+                    chatOut.writeObject(new ChatMessage(streamerId, channelName, "entró al chat."));
+                    chatOut.flush();
+                    Thread chatListener = new Thread(() -> {
+                        try {
+                            while (true) {
+                                Object obj = chatIn.readObject();
+                                if (obj instanceof ChatMessage msg) System.out.println(msg);
+                            }
+                        } catch (SocketException | EOFException ignored) {
+                        } catch (IOException | ClassNotFoundException e) {
+                            System.err.println("[Chat] Error: " + e.getMessage());
+                        }
+                    });
+                    chatListener.setDaemon(true);
+                    chatListener.start();
+                } catch (IOException e) {
+                    System.err.println("[Chat] No se pudo conectar al ChatServer.");
+                }
+
                 //menu de opciones luego de la confirmacion del servidor
                 boolean running = true;
                 while (running) {
@@ -112,6 +138,7 @@ public class StreamerClient {
                     System.out.println("1. Pausar stream");
                     System.out.println("2. Reanudar stream");
                     System.out.println("3. Cerrar canal");
+                    System.out.println("(o escribe un mensaje para el chat)");
                     System.out.print("Elige: ");
 
                     String option = scanner.nextLine();
@@ -140,7 +167,19 @@ public class StreamerClient {
                             //se muere
                             running = false;
                         }
-                        default -> System.out.println("Opción no válida.");
+                        default -> {
+                            if (!option.isBlank() && chatOut != null) {
+                                try {
+                                    ChatMessage msg = new ChatMessage(streamerId, channelName, option);
+                                    chatOut.writeObject(msg);
+                                    chatOut.flush();
+                                    chatOut.reset();
+                                    System.out.println(msg.toString());
+                                } catch (IOException e) {
+                                    System.err.println("[Chat] Error al enviar.");
+                                }
+                            }
+                        }
                     }
                 }
 
