@@ -1,4 +1,6 @@
-package cpyd;
+package cpyd.server;
+
+import cpyd.handler.ChatClientHandler;
 
 import java.io.IOException;
 import java.net.ServerSocket;

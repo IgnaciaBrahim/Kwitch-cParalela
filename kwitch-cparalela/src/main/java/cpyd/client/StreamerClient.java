@@ -1,5 +1,8 @@
-// StreamerClient.java
-package cpyd;
+package cpyd.client;
+
+import cpyd.model.ServerResponse;
+import cpyd.model.StreamSession;
+import cpyd.model.StreamStatus;
 
 import java.io.EOFException;
 import java.io.IOException;

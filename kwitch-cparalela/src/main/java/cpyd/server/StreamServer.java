@@ -1,6 +1,8 @@
-package cpyd;
+package cpyd.server;
 
-//imports
+import cpyd.handler.ClientHandler;
+import cpyd.model.StreamSession;
+
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;

@@ -1,4 +1,9 @@
-package cpyd;
+package cpyd.client;
+
+import cpyd.model.ChatMessage;
+import cpyd.model.ResponseStatus;
+import cpyd.model.ServerResponse;
+import cpyd.model.StreamSession;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;

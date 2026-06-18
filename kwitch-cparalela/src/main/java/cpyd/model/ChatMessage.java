@@ -1,4 +1,4 @@
-package cpyd;
+package cpyd.model;
 
 import java.io.Serializable;
 

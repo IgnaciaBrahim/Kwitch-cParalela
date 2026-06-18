@@ -1,4 +1,7 @@
-package cpyd;
+package cpyd.handler;
+
+import cpyd.model.ChatMessage;
+import cpyd.server.ChatServer;
 
 import java.io.EOFException;
 import java.io.IOException;
