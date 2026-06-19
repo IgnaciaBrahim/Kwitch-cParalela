@@ -1,5 +1,6 @@
 package cpyd.handler;
 
+import cpyd.distributed.RicartAgrawala;
 import cpyd.model.ResponseStatus;
 import cpyd.model.ServerResponse;
 import cpyd.model.StreamSession;
@@ -108,15 +109,29 @@ public class ClientHandler implements Runnable {
         String channel = session.getChannelName();
         this.channelName = channel;
 
-        //se registra la sesion como activa y se llena la lista de suscriptores
-        StreamServer.activeSessions.put(channel, session);
-        StreamServer.subscribers.putIfAbsent(channel, new CopyOnWriteArrayList<>());
+        //pedir permiso a los demas nodos (Ricart-Agrawala) antes de crear el canal
+        try {
+            if (StreamServer.ricart != null) {
+                StreamServer.logger.log("[StreamServer] Pidiendo CS para crear canal '" + channel + "'...");
+                StreamServer.ricart.requestCS();
+            }
 
-        //msjs
-        System.out.println("[StreamServer] Canal abierto: " + channel);
+            //se registra la sesion como activa y se llena la lista de suscriptores
+            StreamServer.activeSessions.put(channel, session);
+            StreamServer.subscribers.putIfAbsent(channel, new CopyOnWriteArrayList<>());
 
-        //no es lo mismo que arriba; aqui al cliente se le dice que se abrio su canal.
-        send(new ServerResponse(ResponseStatus.OK, "Canal abierto: " + channel, session));
+            //msjs
+            StreamServer.logger.log("[StreamServer] Canal abierto: " + channel);
+
+            //no es lo mismo que arriba; aqui al cliente se le dice que se abrio su canal.
+            send(new ServerResponse(ResponseStatus.OK, "Canal abierto: " + channel, session));
+
+        } finally {
+            if (StreamServer.ricart != null) {
+                StreamServer.ricart.releaseCS();
+                StreamServer.logger.log("[StreamServer] CS liberado para canal '" + channel + "'");
+            }
+        }
 
         //se escuchan las actualizaciones del estado del stream
         while (true) {

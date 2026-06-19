@@ -1,5 +1,6 @@
 package cpyd.handler;
 
+import cpyd.distributed.MessageWithClock;
 import cpyd.model.ChatMessage;
 import cpyd.server.ChatServer;
 
@@ -11,6 +12,19 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.List;
+
+/*maneja la conexion de un viewer en el chat.
+
+Ahora usa MessageWithClock para que los mensajes entre handlers tengan
+timestamp de Lamport. Asi se puede ordenar causalmente.
+
+Reglas de Lamport:
+- LC1: antes de enviar, se hace clock.tick() y se adjunta el valor
+- LC2: al recibir, se hace clock.update(timestampDelOtro)
+
+El viewer sigue enviando/recibiendo ChatMessage normal, el wrapper
+MessageWithClock solo se usa internamente entre handlers.
+*/
 
 public class ChatClientHandler implements Runnable {
     private final Socket socket;
@@ -27,19 +41,19 @@ public class ChatClientHandler implements Runnable {
     @Override
     public void run() {
         try {
-            // Detección de clientes silenciosos (fallos tipo omisión)
-            // Lanza SocketTimeoutException si el socket no recibe lecturas en 60 segundos
+            //timeout de 60s para detectar omision
             socket.setSoTimeout(60000);
 
             out = new ObjectOutputStream(socket.getOutputStream());
             out.flush();
             in = new ObjectInputStream(socket.getInputStream());
 
+            //el primer mensaje identifica el canal
             Object obj = in.readObject();
             if (obj instanceof ChatMessage initialMsg) {
                 currentChannel = initialMsg.getChannelId();
                 server.addClientToChannel(currentChannel, this);
-                broadcast(initialMsg); 
+                broadcast(initialMsg);
             }
 
             while (true) {
@@ -48,38 +62,54 @@ public class ChatClientHandler implements Runnable {
                     broadcast(chatMessage);
                 }
             }
-            
-        // Manejo de excepciones de red explícito
+
         } catch (SocketTimeoutException e) {
-            System.err.println("Desconexión por timeout (Omisión). El cliente no envió mensajes a tiempo.");
+            System.err.println("Desconexion por timeout (Omision). El cliente no envio mensajes a tiempo.");
         } catch (SocketException | EOFException e) {
-            System.err.println("Desconexión detectada (Crash) del cliente en canal " + currentChannel + ": " + e.getMessage());
+            System.err.println("Desconexion detectada (Crash) del cliente en canal " + currentChannel + ": " + e.getMessage());
         } catch (IOException | ClassNotFoundException e) {
-            System.err.println("Fallo interno de I/O o estructura de clase inválida: " + e.getMessage());
+            System.err.println("Fallo interno de I/O o estructura de clase invalida: " + e.getMessage());
         } finally {
             cleanUp();
         }
     }
 
-    // Redistribución de mensajes a todos los participantes del canal
+    /*redistribuye el mensaje a los demas participantes del canal
+    pero antes lo envuelve en MessageWithClock con timestamp Lamport.
+    */
     private void broadcast(ChatMessage message) {
+        //LC1: incrementar reloj antes de enviar
+        int ts = server.getClock().tick();
+        MessageWithClock wrapped = new MessageWithClock(ts, server.getNodeId(), "CHAT", message);
+
+        //log del evento con marca Lamport
+        server.getLogger().logLamport(ts, "[CHAT] " + message.getChannelId()
+            + " <" + message.getUser() + ">: " + message.getContent());
+
         List<ChatClientHandler> clients = server.getChannelClients(message.getChannelId());
         if (clients != null) {
             for (ChatClientHandler client : clients) {
-                // Validación para no reenviar el mensaje al emisor original
                 if (!this.equals(client)) {
-                    client.sendMessage(message);
+                    client.sendMessage(wrapped);
                 }
             }
         }
     }
 
-    public void sendMessage(ChatMessage message) {
+    /*recibe un MessageWithClock de otro handler.
+    Aplica LC2: actualiza el reloj con el timestamp del que llega.
+    Despues extrae el ChatMessage y lo envia al viewer.
+    */
+    public void sendMessage(MessageWithClock msg) {
         try {
-            out.writeObject(message);
-            out.flush(); 
+            //LC2: al recibir, actualizar reloj
+            server.getClock().update(msg.getLamportTime());
+
+            ChatMessage chatMessage = (ChatMessage) msg.getPayload();
+            out.writeObject(chatMessage);
+            out.flush();
         } catch (IOException e) {
-            System.err.println("Fallo al enviar mensaje. El cliente remoto probablemente se desconectó.");
+            System.err.println("Fallo al enviar mensaje al viewer. El cliente remoto probablemente se desconecto.");
         }
     }
 
