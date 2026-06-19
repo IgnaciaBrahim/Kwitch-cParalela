@@ -2,6 +2,7 @@ package cpyd.client;
 import cpyd.model.ServerResponse;
 import cpyd.model.StreamSession;
 import cpyd.model.StreamStatus;
+import cpyd.model.ChatMessage;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.ObjectInputStream;
