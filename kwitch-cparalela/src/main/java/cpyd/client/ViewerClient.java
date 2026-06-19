@@ -1,0 +1,214 @@
+package cpyd.client;
+
+import cpyd.model.ChatMessage;
+import cpyd.model.ResponseStatus;
+import cpyd.model.ServerResponse;
+import cpyd.model.StreamSession;
+
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.net.Socket;
+import java.net.SocketException;
+import java.util.List;
+import java.util.Scanner;
+
+/*
+cliente del viewer. Se conecta al StreamServer para ver canales y
+al ChatServer para enviar y recibir mensajes.
+
+*/
+public class ViewerClient {
+
+    private static final String HOST = "127.0.0.1";
+    private static final int STREAM_PORT = 5000;
+    private static final int CHAT_PORT = 6000;
+
+    private final String username;
+    private String targetChannel;
+    
+    // Conexión persistente para el chat
+    private Socket chatSocket;
+    private ObjectOutputStream chatOut;
+
+    public ViewerClient(String username) {
+        this.username = username;
+    }
+
+    public void start(Scanner scanner) {
+        try {
+            System.out.println("\n--- BIENVENIDO A KWITCH ---");
+            
+            // 1. Funcionalidad: Ver canales activos antes de unirse
+            fetchActiveChannels();
+            
+            System.out.print("\nNombre del canal al que desea unirse: ");
+            this.targetChannel = scanner.nextLine();
+
+            // 2. Iniciamos la escucha del StreamServer en un hilo separado
+            Thread streamListener = new Thread(this::connectToStreamServer);
+            streamListener.setDaemon(true);
+            streamListener.start();
+
+            // 3. Iniciamos la conexión al ChatServer
+            setupChat();
+
+            // 4. Bucle principal para el envío de mensajes de chat
+            System.out.println("\nSistema listo. Escriba su mensaje y presione Enter.");
+            System.out.println("(Escriba 'SALIR' para cerrar la aplicación)\n");
+
+            while (true) {
+                String text = scanner.nextLine();
+
+                if ("SALIR".equalsIgnoreCase(text)) {
+                    break;
+                }
+
+                if (chatOut != null && !text.isEmpty()) {
+                    sendChatMessage(text);
+                }
+            }
+
+        } catch (Exception e) {
+            System.err.println("Error en la ejecución del cliente: " + e.getMessage());
+        } finally {
+            closeConnections();
+        }
+    }
+
+    private void fetchActiveChannels() {
+        System.out.println("Buscando canales activos...");
+        try (Socket socket = new Socket(HOST, STREAM_PORT)) {
+            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+            out.flush();
+            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+
+            // Comando para solicitar la lista
+            out.writeObject("LIST_CHANNELS");
+            out.flush();
+
+            Object response = in.readObject();
+            if (response instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<String> channels = (List<String>) response;
+                
+                if (channels.isEmpty()) {
+                    System.out.println("[-] No hay canales transmitiendo en este momento.");
+                } else {
+                    System.out.println("[+] Canales disponibles:");
+                    for (String ch : channels) {
+                        System.out.println("    - " + ch);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[-] No se pudo obtener la lista (Stream Server inactivo).");
+        }
+    }
+
+    private void connectToStreamServer() {
+        while (true) {
+            try (Socket streamSocket = new Socket(HOST, STREAM_PORT)) {
+                ObjectOutputStream out = new ObjectOutputStream(streamSocket.getOutputStream());
+                out.flush();
+                ObjectInputStream in = new ObjectInputStream(streamSocket.getInputStream());
+
+                // Suscripción al canal
+                out.writeObject(targetChannel);
+                out.flush();
+
+                while (!streamSocket.isClosed()) {
+                    Object response = in.readObject();
+
+                    if (response instanceof ServerResponse res) {
+                        handleServerNotification(res);
+                    }
+                }
+
+            } catch (SocketException | java.io.EOFException e) {
+                System.err.println("\n[StreamServer] Conexión perdida. Reintentando en 5 segundos...");
+            } catch (IOException | ClassNotFoundException e) {
+                System.err.println("\n[StreamServer] Error de red: " + e.getMessage());
+            }
+
+            try { Thread.sleep(5000); } catch (InterruptedException ignored) {}
+        }
+    }
+
+    private void handleServerNotification(ServerResponse res) {
+        if (res.getStatus() == ResponseStatus.ERROR) {
+            System.err.println("\n[ERROR] " + res.getMessage());
+            System.exit(0);
+        }
+
+        if (res.getStatus() == ResponseStatus.CHANNEL_CLOSED) {
+            System.out.println("\n[INFO] El streamer ha finalizado la transmisión.");
+        }
+
+        if (res.getPayload() != null) {
+            StreamSession session = res.getPayload();
+            System.out.println("\n>>> UPDATE: Canal '" + session.getChannelName() + 
+                               "' | Estado: " + session.getStatus() + 
+                               " | Vistas: " + session.getViewerCount());
+        }
+    }
+
+    private void setupChat() {
+        try {
+            chatSocket = new Socket(HOST, CHAT_PORT);
+            chatOut = new ObjectOutputStream(chatSocket.getOutputStream());
+            chatOut.flush();
+            ObjectInputStream chatIn = new ObjectInputStream(chatSocket.getInputStream());
+
+            chatOut.writeObject(new ChatMessage(username, targetChannel, "se ha unido al chat."));
+            chatOut.flush();
+
+            Thread chatReader = new Thread(() -> {
+                try {
+                    while (true) {
+                        Object obj = chatIn.readObject();
+                        if (obj instanceof ChatMessage msg) {
+                            System.out.println(msg.toString());
+                        }
+                    }
+                } catch (Exception e) {
+                    System.err.println("[Chat] Desconectado del servidor de chat.");
+                }
+            });
+            chatReader.setDaemon(true);
+            chatReader.start();
+
+        } catch (IOException e) {
+            System.err.println("[Chat] No se pudo conectar al servidor de chat.");
+        }
+    }
+
+    private void sendChatMessage(String content) {
+        try {
+            ChatMessage msg = new ChatMessage(username, targetChannel, content);
+            chatOut.writeObject(msg);
+            chatOut.flush();
+            chatOut.reset();
+            System.out.println(msg.toString());
+        } catch (IOException e) {
+            System.err.println("[Chat] Error al enviar mensaje.");
+        }
+    }
+
+    private void closeConnections() {
+        try {
+            if (chatOut != null) chatOut.close();
+            if (chatSocket != null) chatSocket.close();
+            System.out.println("Conexiones cerradas correctamente.");
+        } catch (IOException ignored) {}
+    }
+
+    public static void main(String[] args) {
+        try (Scanner scanner = new Scanner(System.in)) {
+            System.out.print("Ingrese su nombre de usuario: ");
+            String name = scanner.nextLine();
+            
+            new ViewerClient(name).start(scanner);
+        }
+    }
+}
