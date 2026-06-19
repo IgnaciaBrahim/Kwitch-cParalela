@@ -1,183 +1,110 @@
 # Kwitch — Plataforma de Streaming Distribuida
 
-Kwitch es una plataforma distribuida desarrollada en Java que simula las funciones centrales de servicios de transmisión en vivo como Twitch. Fue desarrollada para el ramo **Computación Paralela y Distribuida**, con foco en la resolución práctica de desafíos propios de los sistemas distribuidos: transparencia de ubicación, sincronización de hilos y mitigación de fallos parciales.
-
-La interfaz es deliberadamente minimalista (consola interactiva) para que el rigor de la ingeniería se concentre en los mecanismos de comunicación distribuida subyacentes.
+Plataforma distribuida en Java que replica las funciones de Twitch (streaming + chat en tiempo real). Proyecto universitario para Computación Paralela y Distribuida.
 
 ---
 
-## Funciones principales
-
-| Función | Descripción |
-|---|---|
-| **Gestión de Streams** | Ciclo de vida completo de canales: el streamer crea, pausa, reanuda y cierra su transmisión; los viewers se suscriben y reciben actualizaciones en tiempo real. |
-| **Chat en Tiempo Real** | Sistema de mensajería por canal: los viewers conectados a un mismo canal pueden enviarse mensajes que se distribuyen instantáneamente a todos los participantes. |
-
----
-
-## Arquitectura del sistema
-
-El sistema está compuesto por **4 procesos autónomos** que se comunican exclusivamente a través de la red mediante sockets TCP:
-
-```
-  ┌─────────────────┐          ┌──────────────────────────────────────┐
-  │  StreamerClient │──────────►                                      │
-  └─────────────────┘  :5000   │         StreamServer (:5000)         │
-  ┌─────────────────┐          │  activeSessions + subscribers map    │
-  │   ViewerClient  │──────────►                                      │
-  │                 │          └──────────────────────────────────────┘
-  │                 │
-  │                 │          ┌──────────────────────────────────────┐
-  │                 │──────────►       ChatServer (:6000)             │
-  └─────────────────┘  :6000   │       channels map (por canal)       │
-                               └──────────────────────────────────────┘
-```
-
-- **StreamServer** (puerto 5000): gestiona los canales activos y la distribución de actualizaciones de estado a los viewers suscritos.
-- **ChatServer** (puerto 6000): gestiona el chat por canal, distribuyendo mensajes a todos los participantes del mismo canal.
-- **StreamerClient**: cliente del streamer — publica y controla su transmisión.
-- **ViewerClient**: cliente del viewer — se suscribe a un canal y participa en el chat con doble conexión simultánea (puerto 5000 y 6000).
-
----
-
-## Tecnologías y conceptos aplicados
-
-| Concepto | Implementación |
-|---|---|
-| **Sockets TCP** | `ServerSocket` / `Socket` para comunicación cliente-servidor persistente |
-| **Serialización de objetos** | `ObjectInputStream` / `ObjectOutputStream` para transmitir `StreamSession`, `ChatMessage` y `ServerResponse` |
-| **Thread-per-client** | `StreamServer` crea un hilo por conexión (`ClientHandler`) |
-| **Thread pool** | `ChatServer` usa `ExecutorService.newCachedThreadPool()` para eficiencia en carga I/O |
-| **Hilos daemon** | Listeners en `ViewerClient` y `StreamerClient` marcados con `setDaemon(true)` |
-| **Colecciones thread-safe** | `ConcurrentHashMap`, `CopyOnWriteArrayList` para acceso concurrente sin bloqueos explícitos |
-| **Fallos de crash** | Detectados via `SocketException` / `EOFException` → limpieza y desuscripción del cliente |
-| **Fallos de omisión** | Detectados via `SocketTimeoutException` (180s en stream, 60s en chat) → limpieza |
-| **Reconexión automática** | `ViewerClient` reintenta la conexión al `StreamServer` con backoff de 5 segundos |
-| **Protocolo por primer mensaje** | `ClientHandler` determina si un cliente es STREAMER o VIEWER según el tipo del primer objeto recibido |
-
----
-
-## Estructura del proyecto
-
-```
-Kwitch-cParalela/
-├── README.md
-├── DIAGRAMAS_UML.md
-├── Documentacion.md
-└── kwitch-cparalela/
-    ├── pom.xml
-    └── src/main/java/cpyd/
-        ├── StreamServer.java        # Servidor de streams (puerto 5000)
-        ├── ClientHandler.java       # Hilo por cliente: rol STREAMER o VIEWER
-        ├── ChatServer.java          # Servidor de chat (puerto 6000)
-        ├── ChatClientHandler.java   # Hilo por cliente de chat
-        ├── StreamerClient.java      # Cliente consola del streamer
-        ├── ViewerClient.java        # Cliente consola del viewer
-        ├── StreamSession.java       # DTO del canal/stream
-        ├── ChatMessage.java         # DTO del mensaje de chat
-        ├── ServerResponse.java      # Wrapper de respuesta del servidor
-        ├── StreamStatus.java        # Enum: LIVE, PAUSED, ENDED
-        ├── ResponseStatus.java      # Enum: OK, ERROR, CHANNEL_CLOSED
-        └── Main.java                # Placeholder (sin uso activo)
-```
-
----
-
-## Requisitos previos
-
-- **Java 17** o superior
-- **Maven 3.6** o superior
-
-```bash
-java -version   # debe mostrar 17 o mayor
-mvn -version    # debe mostrar 3.6 o mayor
-```
-
----
-
-## Compilación
-
-Desde la raíz del repositorio:
+## Cómo compilar
 
 ```bash
 cd kwitch-cparalela
 mvn compile
 ```
 
-Los `.class` compilados quedarán en `target/classes/`.
+## Cómo ejecutar (5 terminales, en este orden)
+
+```bash
+# 1. Servidor de streams (obligatorio)
+java -cp target/classes cpyd.server.StreamServer
+# 2. Servidor de chat (obligatorio)
+java -cp target/classes cpyd.server.ChatServer
+# 3. Coordinador de nodos (obligatorio)
+java -cp target/classes cpyd.distributed.CoordinatorNode
+# 4. Cliente del streamer
+java -cp target/classes cpyd.client.StreamerClient
+# 5. Cliente del viewer
+java -cp target/classes cpyd.client.ViewerClient
+```
+
+Prueba de carga (requiere los 3 servidores corriendo):
+```bash
+java -cp target/classes cpyd.loadtest.LoadGenerator
+```
 
 ---
 
-## Ejecución
+## Estructura del proyecto — qué hace cada archivo
 
-Se necesitan **4 terminales separadas**, en el siguiente orden:
+### `model/` — Objetos que viajan por la red (DTOs serializables)
 
-### Terminal 1 — StreamServer
-```bash
-cd kwitch-cparalela
-java -cp target/classes cpyd.StreamServer
-```
-> Escucha en el puerto **5000**. Debe iniciarse primero.
-
-### Terminal 2 — ChatServer
-```bash
-cd kwitch-cparalela
-java -cp target/classes cpyd.ChatServer
-```
-> Escucha en el puerto **6000**. Debe iniciarse antes que los clientes.
-
-### Terminal 3 — StreamerClient
-```bash
-cd kwitch-cparalela
-java -cp target/classes cpyd.StreamerClient
-```
-> El streamer ingresa los datos de su canal por consola.
-
-### Terminal 4 — ViewerClient
-```bash
-cd kwitch-cparalela
-java -cp target/classes cpyd.ViewerClient
-```
-> El viewer ve los canales disponibles, selecciona uno y participa en el chat.
-
----
-
-## Flujo de uso típico
-
-1. **StreamerClient** inicia y solicita por consola:
-   - ID del streamer
-   - Nombre del canal
-   - Descripción
-   - Aplicación/juego que se transmite
-   - Tags del canal
-2. El canal queda registrado como **LIVE** en el `StreamServer`.
-3. **ViewerClient** inicia, consulta la lista de canales activos y selecciona uno.
-4. El viewer queda suscrito al canal y conectado al chat.
-5. El streamer puede desde su consola:
-   - `1` → Pausar el stream (estado **PAUSED**; viewers son notificados)
-   - `2` → Reanudar el stream (estado **LIVE**; viewers son notificados)
-   - `3` → Terminar el stream (estado **ENDED**; viewers son notificados y desconectados)
-6. Los viewers pueden escribir mensajes de chat que se distribuyen a todos los presentes en el canal.
-
----
-
-## Manejo de fallos
-
-| Tipo de fallo | Detección | Respuesta del sistema |
+| Archivo | Qué hace | Si hay error en... |
 |---|---|---|
-| **Crash del cliente** (desconexión abrupta) | `SocketException` / `EOFException` | El handler limpia la suscripción y cierra los streams I/O |
-| **Fallo de omisión** (cliente silencioso) | `SocketTimeoutException` (180s stream / 60s chat) | Timeout dispara la limpieza como si fuera un crash |
-| **Canal no existente** | Verificación con `containsKey()` | Servidor responde `ServerResponse(ERROR)` al viewer |
-| **Caída del StreamServer** (vista desde viewer) | `IOException` en el hilo daemon | `ViewerClient` reintenta la conexión cada 5 segundos |
-| **Canal cerrado** por el streamer | Estado `ENDED` en `StreamSession` | Broadcast de `CHANNEL_CLOSED` a todos los viewers suscritos |
+| `StreamSession.java` | Define un canal: nombre, streamer, tags, estado (LIVE/PAUSED/ENDED), duración, viewers | La creación o actualización de canales |
+| `ChatMessage.java` | Define un mensaje de chat: usuario, canal, contenido, timestamp | El envío o recepción de mensajes |
+| `ServerResponse.java` | Respuesta del servidor: status (OK/ERROR/CHANNEL_CLOSED), mensaje, payload | Las respuestas que reciben los clientes |
+| `StreamStatus.java` | Enum: LIVE, PAUSED, ENDED | El ciclo de vida del stream |
+| `ResponseStatus.java` | Enum: OK, ERROR, CHANNEL_CLOSED | Los códigos de respuesta |
+
+### `server/` — Servidores TCP (escuchan conexiones entrantes)
+
+| Archivo | Qué hace | Si hay error en... |
+|---|---|---|
+| `StreamServer.java` | Puerto 5000. Acepta conexiones de streamers y viewers. Tiene los mapas `activeSessions` y `subscribers`. Registra los 3 nodos en la membresía, inicia HeartbeatMonitor y RicartAgrawala | La conexión de clientes al puerto 5000, el registro de canales |
+| `ChatServer.java` | Puerto 6000. Acepta conexiones de chat. Tiene reloj Lamport, HeartbeatMonitor y RicartAgrawala (votante). Registra con CoordinatorNode | La conexión de viewers al chat, el broadcast de mensajes |
+
+### `handler/` — Lógica por cada cliente conectado
+
+| Archivo | Qué hace | Si hay error en... |
+|---|---|---|
+| `ClientHandler.java` | Recibe la conexión y decide si es STREAMER (llega un StreamSession) o VIEWER (llega un String). Los streamers pasan por Ricart-Agrawala antes de crear el canal. Los viewers se suscriben y reciben broadcast | La creación de canales, la suscripción de viewers, la desconexión de clientes |
+| `ChatClientHandler.java` | Maneja el chat de un viewer. Aplica LC1/LC2 de Lamport, encola mensajes en PriorityBlockingQueue y los entrega ordenados por timestamp | El orden de los mensajes, la conexión/desconexión del chat |
+
+### `client/` — Interfaces de consola
+
+| Archivo | Qué hace | Si hay error en... |
+|---|---|---|
+| `StreamerClient.java` | Pide datos del canal por consola, envía StreamSession al servidor, muestra menú (pausar/reanudar/cerrar) | La interacción del streamer, el envío de comandos |
+| `ViewerClient.java` | Pide nombre de usuario, muestra canales disponibles, se suscribe, abre chat. Tiene reconexión automática al StreamServer | La experiencia del viewer, la reconexión |
+
+### `distributed/` — Algoritmos del sistema distribuido
+
+| Archivo | Qué hace | Si hay error en... |
+|---|---|---|
+| `LamportClock.java` | Reloj lógico: `tick()` (LC1: antes de enviar), `update(n)` (LC2: al recibir), `getTime()` | Los timestamps Lamport, el orden causal |
+| `MessageWithClock.java` | Envuelve cualquier mensaje con timestamp, senderId, type y payload. Es el formato estándar entre nodos | La comunicación entre servidores |
+| `NodeMembership.java` | Mapa de nodos con estado ALIVE/FAILED. Métodos: registerNode, markFailed, markAlive, getAliveNodes | La detección de nodos caídos, la membresía |
+| `NodeLogger.java` | Escribe logs a `logs/node_Nombre.log` y también a consola. Tiene `log()`, `error()`, `logLamport()` | Los logs que se entregan en el informe |
+| `HeartbeatMonitor.java` | 3 hilos: sender (cada 5s manda HEARTBEAT), receiver (ServerSocket, recibe HEARTBEAT), checker (cada 5s revisa timeout de 15s, marca FAILED) | La detección de caídas de servidores |
+| `RicartAgrawala.java` | Exclusión mutua distribuida. Estados: LIBRE, DESEADO, TOMADO. requestCS() pide permiso a nodos activos, releaseCS() libera. Usa timestamps Lamport para prioridad | La coordinación entre nodos para crear canales |
+| `CoordinatorNode.java` | Puerto 7000. Recibe REGISTER (nuevos nodos), MEMBERSHIP (consulta de activos), DIE (apagado inducido). Participa como votante en Ricart-Agrawala | La tercera terminal, el registro de nodos, la falla inducida |
+
+### `loadtest/` — Prueba de carga
+
+| Archivo | Qué hace | Si hay error en... |
+|---|---|---|
+| `LoadGenerator.java` | 50 hilos, 65 segundos. Cada hilo crea un canal (ejercita RA), se suscribe y envía chat. A los 30s manda DIE al CoordinatorNode y mide recuperación | La prueba de carga, las métricas |
+| `MetricsCollector.java` | Cuenta throughput (req/s), latencia promedio y P95, tasa de error, mensajes de coordinación. Método `printReport()` | Los resultados de la prueba |
 
 ---
 
-## Autores
+## Puertos
 
-* DIEGO ALVARADO MONDACA (DEV 1)
-* IGNACIA BRAHIM LARA (DEV 2)
-* BÁRBARA OYARZO ALFARO (DEV 3)
-* VICENTE PALMA LUCERO (DEV 4)
-* JAVIER RETAMAL FREZ (DEV 5)
-* ARIEL VILLAR SAN JOSÉ (DEV 6)
+| Nodo | Clientes | Heartbeat | Ricart-Agrawala |
+|---|---|---|---|
+| StreamServer | 5000 | 5001 | 5002 |
+| ChatServer | 6000 | 6001 | 6002 |
+| CoordinatorNode | 7000 | 7001 | 7002 |
+
+---
+
+## Conceptos distribuidos
+
+| Concepto | Resumen |
+|---|---|
+| **3+ nodos** | StreamServer:5000, ChatServer:6000, CoordinatorNode:7000 como procesos independientes |
+| **Membresía** | Los 3 nodos se registran mutuamente al iniciar. Además envían REGISTER al CoordinatorNode y re-registran cada 30s |
+| **Lamport** | LC1: `clock.tick()` antes de enviar. LC2: `clock.update(n)` al recibir. PriorityBlockingQueue ordena por (timestamp, senderId) |
+| **Ricart-Agrawala** | requestCS() multicasts REQUEST a `getAliveNodes()`, espera REPLY, entra a CS. releaseCS() envía REPLY a diferidos |
+| **Heartbeat** | Sender cada 5s, receiver con ServerSocket, checker cada 5s con timeout 15s → `markFailed()` |
+| **Recuperación** | Heartbeat entrante → `markAlive()`. Re-registro cada 30s al CoordinatorNode |
+| **Falla inducida** | DIE al puerto 7000. LoadGenerator mide recuperación con rolling window de 20 latencias |

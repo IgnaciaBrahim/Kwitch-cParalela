@@ -10,6 +10,7 @@
 /home/tachuela/Documentos/GitHub/Kwitch-cParalela/kwitch-cparalela/src/main/java/cpyd/distributed/RicartAgrawala.java
 /home/tachuela/Documentos/GitHub/Kwitch-cParalela/kwitch-cparalela/src/main/java/cpyd/handler/ChatClientHandler.java
 /home/tachuela/Documentos/GitHub/Kwitch-cParalela/kwitch-cparalela/src/main/java/cpyd/handler/ClientHandler.java
+/home/tachuela/Documentos/GitHub/Kwitch-cParalela/kwitch-cparalela/src/main/java/cpyd/loadtest/LoadGenerator.java
 /home/tachuela/Documentos/GitHub/Kwitch-cParalela/kwitch-cparalela/src/main/java/cpyd/loadtest/MetricsCollector.java
 /home/tachuela/Documentos/GitHub/Kwitch-cParalela/kwitch-cparalela/src/main/java/cpyd/model/ChatMessage.java
 /home/tachuela/Documentos/GitHub/Kwitch-cParalela/kwitch-cparalela/src/main/java/cpyd/model/ResponseStatus.java

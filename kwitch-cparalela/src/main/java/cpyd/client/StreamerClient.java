@@ -1,9 +1,7 @@
 package cpyd.client;
-
 import cpyd.model.ServerResponse;
 import cpyd.model.StreamSession;
 import cpyd.model.StreamStatus;
-
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -13,7 +11,6 @@ import java.net.SocketException;
 import java.util.Arrays;
 import java.util.Scanner;
 
-//objetivo
 
 /*el StreamerClient es la interfaz del streamer. Es el proceso que representa al usuario que va a 
 transmitir en Kwitch.

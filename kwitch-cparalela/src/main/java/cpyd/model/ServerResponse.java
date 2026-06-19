@@ -1,9 +1,5 @@
 package cpyd.model;
-
-//imports
 import java.io.Serializable;
-
-//objetivo:
 
 /*es el la respuesta (un objeto) que el servidor le devuelve al cliente después de 
 cualquier operación. 

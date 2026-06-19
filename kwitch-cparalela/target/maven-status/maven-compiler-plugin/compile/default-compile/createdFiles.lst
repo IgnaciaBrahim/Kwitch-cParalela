@@ -6,6 +6,7 @@ cpyd/distributed/NodeLogger.class
 cpyd/distributed/CoordinatorHandler.class
 cpyd/distributed/CoordinatorNode.class
 cpyd/client/StreamerClient.class
+cpyd/loadtest/LoadGenerator.class
 cpyd/handler/ChatClientHandler.class
 cpyd/model/ResponseStatus.class
 cpyd/distributed/LamportClock.class

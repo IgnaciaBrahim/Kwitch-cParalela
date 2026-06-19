@@ -2,20 +2,21 @@ package cpyd.model;
 
 import java.io.Serializable;
 
+//mensaje de chat que viaja entre viewer y ChatServer
+
 public class ChatMessage implements Serializable {
-    
+
     private static final long serialVersionUID = 1L;
-    
-    private final String user;
-    private final String channelId;
-    private final String content;
-    private final long timestamp;
+
+    private final String user;       //quien envia el mensaje
+    private final String channelId;  //canal al que pertenece
+    private final String content;    //texto del mensaje
+    private final long timestamp;    //momento en que se creo
 
     public ChatMessage(String user, String channelId, String content) {
         this.user = user;
         this.channelId = channelId;
         this.content = content;
-        // Se asume el timestamp en el momento de creación del objeto
         this.timestamp = System.currentTimeMillis();
     }
 

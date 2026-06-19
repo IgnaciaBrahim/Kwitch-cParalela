@@ -2,8 +2,6 @@ package cpyd.distributed;
 
 import java.io.Serializable;
 
-//objetivo:
-
 /*es un wrapper que envuelve cualquier mensaje que viaje entre nodos,
 pero con el timestamp de Lamport incluido.
 

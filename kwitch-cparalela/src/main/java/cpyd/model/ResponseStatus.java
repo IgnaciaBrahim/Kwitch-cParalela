@@ -1,7 +1,5 @@
 package cpyd.model;
 
-//objetivo
-
 /*una lista de valores posibles para las respuestas del servidor (como en StreamStatus). 
 
 Se va a utilizar para definir si una operación resultó bien (OK), mal (ERROR), o si el canal fue 

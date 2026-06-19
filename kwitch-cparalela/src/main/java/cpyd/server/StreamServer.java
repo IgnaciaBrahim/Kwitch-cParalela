@@ -55,6 +55,8 @@ public class StreamServer {
             + " (HB:" + HB_PORT + ", RA:" + RA_PORT + ")");
 
         membership.registerNode("StreamServer", "localhost", PORT);
+        membership.registerNode("ChatServer", "localhost", 6000);
+        membership.registerNode("CoordinatorNode", "localhost", 7000);
 
         //iniciar Ricart-Agrawala con logger y metricas
         List<RicartAgrawala.PeerInfo> raPeers = List.of(
@@ -73,6 +75,16 @@ public class StreamServer {
 
         //registrarse con CoordinatorNode
         registerWithCoordinator();
+
+        //re-registrarse cada 30s para reintegracion si CoordinatorNode vuelve
+        Thread reReg = new Thread(() -> {
+            while (true) {
+                try { Thread.sleep(30000); } catch (InterruptedException e) { break; }
+                registerWithCoordinator();
+            }
+        }, "reReg-StreamServer");
+        reReg.setDaemon(true);
+        reReg.start();
 
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
             while (true) {

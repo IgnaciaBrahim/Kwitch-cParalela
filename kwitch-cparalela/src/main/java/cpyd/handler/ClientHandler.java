@@ -18,7 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-//objetivo
+
 /*este es un hilo que atiende al cliente conectado a traves de la sesion. 
 Primero identifica que tipo de cliente es según el primer mensaje que recibe
 

@@ -12,18 +12,18 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.List;
+import java.util.concurrent.PriorityBlockingQueue;
 
 /*maneja la conexion de un viewer en el chat.
 
-Ahora usa MessageWithClock para que los mensajes entre handlers tengan
-timestamp de Lamport. Asi se puede ordenar causalmente.
+Usa MessageWithClock para que los mensajes entre handlers tengan
+timestamp de Lamport. Los mensajes recibidos se ordenan en una cola
+de prioridad por (lamportTime, senderId) antes de entregarse al viewer,
+asi se garantiza orden causal.
 
 Reglas de Lamport:
 - LC1: antes de enviar, se hace clock.tick() y se adjunta el valor
 - LC2: al recibir, se hace clock.update(timestampDelOtro)
-
-El viewer sigue enviando/recibiendo ChatMessage normal, el wrapper
-MessageWithClock solo se usa internamente entre handlers.
 */
 
 public class ChatClientHandler implements Runnable {
@@ -33,6 +33,14 @@ public class ChatClientHandler implements Runnable {
     private ObjectInputStream in;
     private String currentChannel;
 
+    //cola que ordena mensajes por timestamp Lamport (y senderId para desempate)
+    private final PriorityBlockingQueue<MessageWithClock> deliveryQueue =
+        new PriorityBlockingQueue<>(11, (a, b) -> {
+            int cmp = Integer.compare(a.getLamportTime(), b.getLamportTime());
+            if (cmp != 0) return cmp;
+            return a.getSenderId().compareTo(b.getSenderId());
+        });
+
     public ChatClientHandler(Socket socket, ChatServer server) {
         this.socket = socket;
         this.server = server;
@@ -41,12 +49,16 @@ public class ChatClientHandler implements Runnable {
     @Override
     public void run() {
         try {
-            //timeout de 60s para detectar omision
             socket.setSoTimeout(60000);
 
             out = new ObjectOutputStream(socket.getOutputStream());
             out.flush();
             in = new ObjectInputStream(socket.getInputStream());
+
+            //hilo que entrega mensajes al viewer en orden Lamport
+            Thread deliveryThread = new Thread(this::deliveryLoop, "chat-delivery-" + socket.getPort());
+            deliveryThread.setDaemon(true);
+            deliveryThread.start();
 
             //el primer mensaje identifica el canal
             Object obj = in.readObject();
@@ -74,15 +86,27 @@ public class ChatClientHandler implements Runnable {
         }
     }
 
+    /*hilo que lee de la cola ordenada y escribe al viewer.
+    Los mensajes se entregan en orden ascendente de Lamport.*/
+    private void deliveryLoop() {
+        try {
+            while (!socket.isClosed()) {
+                MessageWithClock msg = deliveryQueue.take(); //bloquea hasta que haya algo
+                ChatMessage chatMessage = (ChatMessage) msg.getPayload();
+                out.writeObject(chatMessage);
+                out.flush();
+            }
+        } catch (Exception e) {
+            //el socket se cerro, el hilo termina
+        }
+    }
+
     /*redistribuye el mensaje a los demas participantes del canal
-    pero antes lo envuelve en MessageWithClock con timestamp Lamport.
-    */
+    envuelto en MessageWithClock con timestamp Lamport (LC1).*/
     private void broadcast(ChatMessage message) {
-        //LC1: incrementar reloj antes de enviar
         int ts = server.getClock().tick();
         MessageWithClock wrapped = new MessageWithClock(ts, server.getNodeId(), "CHAT", message);
 
-        //log del evento con marca Lamport
         server.getLogger().logLamport(ts, "[CHAT] " + message.getChannelId()
             + " <" + message.getUser() + ">: " + message.getContent());
 
@@ -97,20 +121,10 @@ public class ChatClientHandler implements Runnable {
     }
 
     /*recibe un MessageWithClock de otro handler.
-    Aplica LC2: actualiza el reloj con el timestamp del que llega.
-    Despues extrae el ChatMessage y lo envia al viewer.
-    */
+    Aplica LC2 y lo encola para entrega ordenada.*/
     public void sendMessage(MessageWithClock msg) {
-        try {
-            //LC2: al recibir, actualizar reloj
-            server.getClock().update(msg.getLamportTime());
-
-            ChatMessage chatMessage = (ChatMessage) msg.getPayload();
-            out.writeObject(chatMessage);
-            out.flush();
-        } catch (IOException e) {
-            System.err.println("Fallo al enviar mensaje al viewer. El cliente remoto probablemente se desconecto.");
-        }
+        server.getClock().update(msg.getLamportTime());
+        deliveryQueue.add(msg);
     }
 
     private void cleanUp() {

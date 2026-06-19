@@ -6,7 +6,6 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.List;
 
-//objetivo:
 
 /*tercer nodo del sistema (puerto 7000). Sirve como punto de coordinacion
 para que StreamServer y ChatServer se conozcan entre si.
@@ -35,6 +34,8 @@ public class CoordinatorNode {
 
     public void start() {
         membership.registerNode("CoordinatorNode", "localhost", PORT);
+        membership.registerNode("StreamServer", "localhost", 5000);
+        membership.registerNode("ChatServer", "localhost", 6000);
 
         logger.log("[CoordinatorNode] Iniciando en puerto " + PORT
             + " (HB:" + HB_PORT + ", RA:" + RA_PORT + ")");
@@ -93,15 +94,19 @@ class CoordinatorHandler implements Runnable {
             out.flush();
             ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
 
+            //leer el mensaje entrante y actuar segun su tipo
             Object obj = in.readObject();
 
             if (obj instanceof MessageWithClock msg) {
 
+                //LC2: actualizar reloj al recibir
                 node.getClock().update(msg.getLamportTime());
                 String type = msg.getType();
 
                 if ("REGISTER".equals(type)) {
+                    //alguien se registra en el sistema
                     NodeMembership.NodeInfo info = (NodeMembership.NodeInfo) msg.getPayload();
+                    //registrar con puerto principal y puerto HB
                     node.getMembership().registerNode(info.getId(), info.getHost(), info.getPort() - 1);
                     node.getMembership().registerNode(info.getId(), info.getHost(), info.getPort());
 
@@ -112,6 +117,7 @@ class CoordinatorHandler implements Runnable {
                     out.flush();
 
                 } else if ("MEMBERSHIP".equals(type)) {
+                    //alguien pide la lista de nodos activos
                     List<String> alive = node.getMembership().getAliveNodes();
                     out.writeObject(new MessageWithClock(
                         node.getClock().tick(), "CoordinatorNode", "MEMBERSHIP_OK", (Object) alive
@@ -119,6 +125,7 @@ class CoordinatorHandler implements Runnable {
                     out.flush();
 
                 } else if ("DIE".equals(type)) {
+                    //falla inducida: apagar este nodo
                     node.getLogger().log("[CoordinatorNode] Recibido DIE. Apagando...");
                     out.writeObject(new MessageWithClock(
                         node.getClock().tick(), "CoordinatorNode", "DYING", null

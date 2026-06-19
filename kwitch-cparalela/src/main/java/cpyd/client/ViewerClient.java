@@ -13,10 +13,11 @@ import java.net.SocketException;
 import java.util.List;
 import java.util.Scanner;
 
-/**
- * Cliente para los espectadores de Kwitch.
- * Se conecta al StreamServer para recibir estados y al ChatServer para interactuar.
- */
+/*
+cliente del viewer. Se conecta al StreamServer para ver canales y
+al ChatServer para enviar y recibir mensajes.
+
+*/
 public class ViewerClient {
 
     private static final String HOST = "127.0.0.1";

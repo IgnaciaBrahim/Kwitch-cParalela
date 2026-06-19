@@ -7,7 +7,6 @@ import java.net.Socket;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
-//objetivo:
 
 /*monitorea si los otros nodos del sistema estan vivos.
 
@@ -73,13 +72,10 @@ public class HeartbeatMonitor {
         running = false;
     }
 
+    //cada 5s envia HEARTBEAT a cada peer por TCP
     private void senderLoop() {
         while (running) {
-            try {
-                Thread.sleep(interval);
-            } catch (InterruptedException e) {
-                break;
-            }
+            try { Thread.sleep(interval); } catch (InterruptedException e) { break; }
 
             for (NodeMembership.NodeInfo peer : peers) {
                 try {
@@ -88,19 +84,20 @@ public class HeartbeatMonitor {
                     out.flush();
                     ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
 
-                    int ts = clock.tick();
+                    int ts = clock.tick(); //LC1: timestamp antes de enviar
                     MessageWithClock hb = new MessageWithClock(ts, myId, "HEARTBEAT", null);
                     out.writeObject(hb);
                     out.flush();
 
                     socket.close();
                 } catch (Exception e) {
-                    //el checker lo va a detectar por timeout
+                    //el checker detectara por timeout si no responde
                 }
             }
         }
     }
 
+    //escucha HEARTBEAT de los peers y los marca como vivos
     private void receiverLoop() {
         try (ServerSocket serverSocket = new ServerSocket(myHbPort)) {
             while (running) {
@@ -114,9 +111,9 @@ public class HeartbeatMonitor {
                     if (obj instanceof MessageWithClock msg
                             && "HEARTBEAT".equals(msg.getType())) {
 
-                        clock.update(msg.getLamportTime());
+                        clock.update(msg.getLamportTime()); //LC2
                         lastHeartbeat.put(msg.getSenderId(), System.currentTimeMillis());
-                        membership.markAlive(msg.getSenderId());
+                        membership.markAlive(msg.getSenderId()); //reintegrar si estaba caido
                     }
 
                     socket.close();
@@ -129,13 +126,10 @@ public class HeartbeatMonitor {
         }
     }
 
+    //cada 5s revisa si algun peer supero los 15s sin heartbeat
     private void checkerLoop() {
         while (running) {
-            try {
-                Thread.sleep(interval);
-            } catch (InterruptedException e) {
-                break;
-            }
+            try { Thread.sleep(interval); } catch (InterruptedException e) { break; }
 
             long now = System.currentTimeMillis();
             for (NodeMembership.NodeInfo peer : peers) {

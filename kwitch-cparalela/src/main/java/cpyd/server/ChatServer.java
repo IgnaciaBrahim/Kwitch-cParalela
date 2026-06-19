@@ -48,6 +48,8 @@ public class ChatServer {
 
     public void startServer() {
         membership.registerNode(nodeId, "localhost", PORT);
+        membership.registerNode("StreamServer", "localhost", 5000);
+        membership.registerNode("CoordinatorNode", "localhost", 7000);
 
         logger.log("[ChatServer] Iniciando en puerto " + PORT
             + " (HB:" + HB_PORT + ", RA:" + RA_PORT + ")");
@@ -69,6 +71,16 @@ public class ChatServer {
 
         //registrarse con CoordinatorNode
         registerWithCoordinator();
+
+        //re-registrarse cada 30s
+        Thread reReg = new Thread(() -> {
+            while (true) {
+                try { Thread.sleep(30000); } catch (InterruptedException e) { break; }
+                registerWithCoordinator();
+            }
+        }, "reReg-ChatServer");
+        reReg.setDaemon(true);
+        reReg.start();
 
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
             logger.log("[ChatServer] Escuchando en puerto " + PORT + "...");

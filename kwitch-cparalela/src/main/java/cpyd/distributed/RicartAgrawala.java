@@ -6,12 +6,10 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
-
-//objetivo:
 
 /*implementacion del algoritmo de Ricart y Agrawala para exclusion
 mutua distribuida. Sirve para que los nodos se pongan de acuerdo sobre
@@ -56,9 +54,9 @@ public class RicartAgrawala {
     private final NodeLogger logger;
     private final MetricsCollector metrics;
 
-    private String estado = "LIBRE";
-    private int mySeq = 0;
-    private final Set<String> repliesReceived = new HashSet<>();
+    private volatile String estado = "LIBRE";
+    private volatile int mySeq = 0;
+    private final Set<String> repliesReceived = ConcurrentHashMap.newKeySet();
     private final ConcurrentLinkedQueue<MessageWithClock> deferred = new ConcurrentLinkedQueue<>();
     private final Object waitLock = new Object();
 
@@ -82,8 +80,9 @@ public class RicartAgrawala {
     }
 
     public void requestCS() {
+        //cambio a DESEADO: quiero entrar a la seccion critica
         estado = "DESEADO";
-        mySeq = clock.tick();
+        mySeq = clock.tick(); //LC1: timestamp antes de enviar
         repliesReceived.clear();
 
         List<String> aliveNodes = membership.getAliveNodes();
@@ -91,6 +90,7 @@ public class RicartAgrawala {
 
         logger.log("[RA] " + myId + " pide CS (seq=" + mySeq + ")");
 
+        //envio REQUEST a cada peer vivo
         for (PeerInfo peer : peers) {
             if (!aliveNodes.contains(peer.getId())) {
                 logger.log("[RA] " + peer.getId() + " esta FAILED, se saltea");
@@ -109,6 +109,7 @@ public class RicartAgrawala {
 
                 if (metrics != null) metrics.recordCoordinationMessage();
 
+                //espero REPLY o detecto que se difirio
                 try {
                     Object resp = in.readObject();
                     if (resp instanceof MessageWithClock rsp
@@ -119,7 +120,7 @@ public class RicartAgrawala {
                         if (metrics != null) metrics.recordCoordinationMessage();
                     }
                 } catch (Exception e) {
-                    peersNeeded++;
+                    peersNeeded++; //diferido, igual lo cuento
                 }
 
                 socket.close();
@@ -128,6 +129,7 @@ public class RicartAgrawala {
             }
         }
 
+        //esperar hasta tener todos los replies
         synchronized (waitLock) {
             while (repliesReceived.size() < peersNeeded) {
                 try {
@@ -136,6 +138,7 @@ public class RicartAgrawala {
                     Thread.currentThread().interrupt();
                     break;
                 }
+                //recalcular por si algun nodo se cayo mientras esperaba
                 peersNeeded = 0;
                 for (PeerInfo peer : peers) {
                     if (membership.getAliveNodes().contains(peer.getId())) {
@@ -145,6 +148,7 @@ public class RicartAgrawala {
             }
         }
 
+        //todos respondieron, entro a CS
         estado = "TOMADO";
         logger.log("[RA] " + myId + " ENTRA a CS (seq=" + mySeq + ")");
     }
@@ -153,6 +157,7 @@ public class RicartAgrawala {
         logger.log("[RA] " + myId + " SALE de CS (seq=" + mySeq + ")");
         estado = "LIBRE";
 
+        //envio REPLY a todos los que habian diferido
         MessageWithClock deferredMsg;
         while ((deferredMsg = deferred.poll()) != null) {
             String peerId = deferredMsg.getSenderId();
@@ -181,6 +186,7 @@ public class RicartAgrawala {
     }
 
     private void receiverLoop() {
+        //escucha en myPort los mensajes RA de otros nodos
         try (ServerSocket serverSocket = new ServerSocket(myPort)) {
             while (true) {
                 try {
@@ -191,7 +197,7 @@ public class RicartAgrawala {
 
                     Object obj = in.readObject();
                     if (obj instanceof MessageWithClock msg) {
-                        clock.update(msg.getLamportTime());
+                        clock.update(msg.getLamportTime()); //LC2
                         if (metrics != null) metrics.recordCoordinationMessage();
 
                         switch (msg.getType()) {
@@ -212,6 +218,7 @@ public class RicartAgrawala {
         }
     }
 
+    //procesa REQUEST: responde REPLY o difiere segun el estado y prioridad
     private void handleRequest(MessageWithClock msg, ObjectOutputStream out) {
         String senderId = msg.getSenderId();
         int senderSeq = msg.getLamportTime();
@@ -220,6 +227,7 @@ public class RicartAgrawala {
 
         try {
             if ("LIBRE".equals(estado)) {
+                //estoy libre, respondo REPLY inmediato
                 int ts = clock.tick();
                 out.writeObject(new MessageWithClock(ts, myId, "REPLY", null));
                 out.flush();
@@ -227,10 +235,12 @@ public class RicartAgrawala {
                 logger.log("[RA] " + myId + " -> REPLY a " + senderId + " (LIBRE)");
 
             } else if ("TOMADO".equals(estado)) {
+                //estoy en CS, difiero la respuesta
                 deferred.add(msg);
                 logger.log("[RA] " + myId + " difiere REQUEST de " + senderId + " (TOMADO)");
 
             } else if ("DESEADO".equals(estado)) {
+                //ambos queremos CS, comparar prioridad (timestamp, despues ID)
                 boolean iHavePriority;
                 if (mySeq < senderSeq) {
                     iHavePriority = true;
@@ -258,6 +268,7 @@ public class RicartAgrawala {
         }
     }
 
+    //cuenta REPLY y despierta a requestCS() si esta esperando
     private void handleReply(MessageWithClock msg) {
         logger.log("[RA] " + myId + " recibe REPLY de " + msg.getSenderId());
         repliesReceived.add(msg.getSenderId());

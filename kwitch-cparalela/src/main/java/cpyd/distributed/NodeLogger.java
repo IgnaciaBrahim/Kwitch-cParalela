@@ -4,17 +4,12 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.PrintWriter;
 
-//objetivo:
 
 /*escribe logs a un archivo y tambien los muestra en consola.
 
 Cada nodo del sistema (StreamServer, ChatServer, CoordinatorNode) tiene
 el suyo. Los archivos quedan en la carpeta logs/ con el nombre del nodo.
 
-Ejemplo: logs/node_StreamServer.log, logs/node_ChatServer.log
-
-Sirve para que la rubrica pida "logs de la corrida con marcas logicas"
-y se puedan adjuntar a la entrega.
 */
 
 public class NodeLogger {
