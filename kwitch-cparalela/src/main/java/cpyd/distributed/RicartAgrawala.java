@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.locks.ReentrantLock;
 
 /*implementacion del algoritmo de Ricart y Agrawala para exclusion
 mutua distribuida. Sirve para que los nodos se pongan de acuerdo sobre
@@ -60,6 +61,13 @@ public class RicartAgrawala {
     private final ConcurrentLinkedQueue<MessageWithClock> deferred = new ConcurrentLinkedQueue<>();
     private final Object waitLock = new Object();
 
+    //Ricart-Agrawala coordina la seccion critica entre nodos distintos, pero
+    //dentro de un mismo nodo hay muchos hilos (uno por cliente). Este lock hace
+    //que solo un hilo local ejecute el protocolo a la vez, asi no se pisan el
+    //estado compartido. Es justo (FIFO) para que ninguno se quede esperando para
+    //siempre cuando hay mucha carga.
+    private final ReentrantLock localCs = new ReentrantLock(true);
+
     public RicartAgrawala(String myId, int myPort,
                           List<PeerInfo> peers,
                           NodeMembership membership,
@@ -80,9 +88,13 @@ public class RicartAgrawala {
     }
 
     public void requestCS() {
-        //cambio a DESEADO: quiero entrar a la seccion critica
-        estado = "DESEADO";
+        //un solo hilo local a la vez ejecuta el protocolo
+        localCs.lock();
+
+        //primero el timestamp y despues el estado, asi un peer que pregunte
+        //justo ahora nunca nos ve en DESEADO con un mySeq viejo
         mySeq = clock.tick(); //LC1: timestamp antes de enviar
+        estado = "DESEADO";
         repliesReceived.clear();
 
         List<String> aliveNodes = membership.getAliveNodes();
@@ -101,7 +113,7 @@ public class RicartAgrawala {
                 Socket socket = new Socket(peer.getHost(), peer.getPort());
                 ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
                 out.flush();
-                ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+                ObjectInputStream in = new SafeObjectInputStream(socket.getInputStream());
 
                 MessageWithClock request = new MessageWithClock(mySeq, myId, "REQUEST", null);
                 out.writeObject(request);
@@ -154,33 +166,40 @@ public class RicartAgrawala {
     }
 
     public void releaseCS() {
-        logger.log("[RA] " + myId + " SALE de CS (seq=" + mySeq + ")");
-        estado = "LIBRE";
+        try {
+            logger.log("[RA] " + myId + " SALE de CS (seq=" + mySeq + ")");
+            estado = "LIBRE";
 
-        //envio REPLY a todos los que habian diferido
-        MessageWithClock deferredMsg;
-        while ((deferredMsg = deferred.poll()) != null) {
-            String peerId = deferredMsg.getSenderId();
-            for (PeerInfo peer : peers) {
-                if (peer.getId().equals(peerId)) {
-                    try {
-                        Socket socket = new Socket(peer.getHost(), peer.getPort());
-                        ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-                        out.flush();
+            //envio REPLY a todos los que habian diferido
+            MessageWithClock deferredMsg;
+            while ((deferredMsg = deferred.poll()) != null) {
+                String peerId = deferredMsg.getSenderId();
+                for (PeerInfo peer : peers) {
+                    if (peer.getId().equals(peerId)) {
+                        try {
+                            Socket socket = new Socket(peer.getHost(), peer.getPort());
+                            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+                            out.flush();
 
-                        int ts = clock.tick();
-                        MessageWithClock reply = new MessageWithClock(ts, myId, "REPLY", null);
-                        out.writeObject(reply);
-                        out.flush();
-                        if (metrics != null) metrics.recordCoordinationMessage();
+                            int ts = clock.tick();
+                            MessageWithClock reply = new MessageWithClock(ts, myId, "REPLY", null);
+                            out.writeObject(reply);
+                            out.flush();
+                            if (metrics != null) metrics.recordCoordinationMessage();
 
-                        socket.close();
-                        logger.log("[RA] " + myId + " envio REPLY pendiente a " + peerId);
-                    } catch (Exception e) {
-                        logger.error("[RA] Error al enviar REPLY diferido a " + peerId);
+                            socket.close();
+                            logger.log("[RA] " + myId + " envio REPLY pendiente a " + peerId);
+                        } catch (Exception e) {
+                            logger.error("[RA] Error al enviar REPLY diferido a " + peerId);
+                        }
+                        break;
                     }
-                    break;
                 }
+            }
+        } finally {
+            //soltamos el lock local siempre, aunque algo haya fallado al avisar
+            if (localCs.isHeldByCurrentThread()) {
+                localCs.unlock();
             }
         }
     }
@@ -191,7 +210,7 @@ public class RicartAgrawala {
             while (true) {
                 try {
                     Socket socket = serverSocket.accept();
-                    ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+                    ObjectInputStream in = new SafeObjectInputStream(socket.getInputStream());
                     ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
                     out.flush();
 
@@ -252,8 +271,11 @@ public class RicartAgrawala {
 
                 if (iHavePriority) {
                     deferred.add(msg);
+                    String motivo = (mySeq != senderSeq)
+                        ? ("menor seq " + mySeq + "<" + senderSeq)
+                        : ("empate seq=" + mySeq + ", gana id menor: " + myId + "<" + senderId);
                     logger.log("[RA] " + myId + " difiere REQUEST de " + senderId
-                        + " (yo tengo prioridad: " + mySeq + "<" + senderSeq + ")");
+                        + " (tengo prioridad: " + motivo + ")");
                 } else {
                     int ts = clock.tick();
                     out.writeObject(new MessageWithClock(ts, myId, "REPLY", null));

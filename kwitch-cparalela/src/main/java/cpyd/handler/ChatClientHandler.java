@@ -1,6 +1,7 @@
 package cpyd.handler;
 
 import cpyd.distributed.MessageWithClock;
+import cpyd.distributed.SafeObjectInputStream;
 import cpyd.model.ChatMessage;
 import cpyd.server.ChatServer;
 
@@ -53,7 +54,7 @@ public class ChatClientHandler implements Runnable {
 
             out = new ObjectOutputStream(socket.getOutputStream());
             out.flush();
-            in = new ObjectInputStream(socket.getInputStream());
+            in = new SafeObjectInputStream(socket.getInputStream());
 
             //hilo que entrega mensajes al viewer en orden Lamport
             Thread deliveryThread = new Thread(this::deliveryLoop, "chat-delivery-" + socket.getPort());

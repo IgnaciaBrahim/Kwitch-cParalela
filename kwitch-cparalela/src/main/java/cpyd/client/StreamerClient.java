@@ -1,4 +1,6 @@
 package cpyd.client;
+import cpyd.distributed.SafeObjectInputStream;
+import cpyd.model.ChatMessage;
 import cpyd.model.ServerResponse;
 import cpyd.model.StreamSession;
 import cpyd.model.StreamStatus;
@@ -60,7 +62,7 @@ public class StreamerClient {
             try (Socket socket = new Socket(HOST, PORT)) {
                 //out antes que el in (no deadlock)
                 ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-                ObjectInputStream  in  = new ObjectInputStream(socket.getInputStream());
+                ObjectInputStream  in  = new SafeObjectInputStream(socket.getInputStream());
 
                 // Crear y enviar sesión inicial
                 StreamSession session = new StreamSession(streamerId, channelName, description, 
@@ -111,7 +113,7 @@ public class StreamerClient {
                     Socket chatSocket = new Socket(HOST, 6000);
                     chatOut = new ObjectOutputStream(chatSocket.getOutputStream());
                     chatOut.flush();
-                    ObjectInputStream chatIn = new ObjectInputStream(chatSocket.getInputStream());
+                    ObjectInputStream chatIn = new SafeObjectInputStream(chatSocket.getInputStream());
                     chatOut.writeObject(new ChatMessage(streamerId, channelName, "entró al chat."));
                     chatOut.flush();
                     Thread chatListener = new Thread(() -> {

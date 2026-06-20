@@ -26,8 +26,10 @@ public class HeartbeatMonitor {
     private final LamportClock clock;
     private final NodeLogger logger;
 
-    private final int interval = 5000;
-    private final int timeout  = 15000;
+    //mandamos un latido cada 2s; si un nodo no late en 6s (3 latidos seguidos
+    //perdidos) lo damos por caido
+    private final int interval = 2000;
+    private final int timeout  = 6000;
 
     private final ConcurrentHashMap<String, Long> lastHeartbeat = new ConcurrentHashMap<>();
     private volatile boolean running = false;
@@ -82,7 +84,7 @@ public class HeartbeatMonitor {
                     Socket socket = new Socket(peer.getHost(), peer.getPort());
                     ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
                     out.flush();
-                    ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+                    ObjectInputStream in = new SafeObjectInputStream(socket.getInputStream());
 
                     int ts = clock.tick(); //LC1: timestamp antes de enviar
                     MessageWithClock hb = new MessageWithClock(ts, myId, "HEARTBEAT", null);
@@ -103,7 +105,7 @@ public class HeartbeatMonitor {
             while (running) {
                 try {
                     Socket socket = serverSocket.accept();
-                    ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+                    ObjectInputStream in = new SafeObjectInputStream(socket.getInputStream());
                     ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
                     out.flush();
 
@@ -113,7 +115,15 @@ public class HeartbeatMonitor {
 
                         clock.update(msg.getLamportTime()); //LC2
                         lastHeartbeat.put(msg.getSenderId(), System.currentTimeMillis());
-                        membership.markAlive(msg.getSenderId()); //reintegrar si estaba caido
+
+                        //si el nodo estaba caido y vuelve a latir, lo reintegramos.
+                        //solo lo anotamos en el cambio de estado, no en cada latido
+                        NodeMembership.NodeInfo info = membership.getNode(msg.getSenderId());
+                        if (info != null && "FAILED".equals(info.getStatus())) {
+                            membership.markAlive(msg.getSenderId());
+                            logger.log("[Heartbeat] Nodo " + msg.getSenderId()
+                                + " REINTEGRADO (volvio a latir)");
+                        }
                     }
 
                     socket.close();
@@ -135,9 +145,14 @@ public class HeartbeatMonitor {
             for (NodeMembership.NodeInfo peer : peers) {
                 Long last = lastHeartbeat.get(peer.getId());
                 if (last != null && (now - last) > timeout) {
-                    membership.markFailed(peer.getId());
-                    logger.log("[Heartbeat] Nodo " + peer.getId()
-                        + " marcado como FAILED (sin heartbeat por " + (now - last) + "ms)");
+                    //marcamos FAILED y lo anotamos una sola vez (cuando pasa de
+                    //ALIVE a FAILED), para no llenar el log mientras sigue caido
+                    NodeMembership.NodeInfo info = membership.getNode(peer.getId());
+                    if (info != null && !"FAILED".equals(info.getStatus())) {
+                        membership.markFailed(peer.getId());
+                        logger.log("[Heartbeat] Nodo " + peer.getId()
+                            + " marcado como FAILED (sin heartbeat por " + (now - last) + "ms)");
+                    }
                 }
             }
         }

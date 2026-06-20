@@ -92,7 +92,7 @@ class CoordinatorHandler implements Runnable {
         try {
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
             out.flush();
-            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+            ObjectInputStream in = new SafeObjectInputStream(socket.getInputStream());
 
             //leer el mensaje entrante y actuar segun su tipo
             Object obj = in.readObject();
@@ -106,11 +106,12 @@ class CoordinatorHandler implements Runnable {
                 if ("REGISTER".equals(type)) {
                     //alguien se registra en el sistema
                     NodeMembership.NodeInfo info = (NodeMembership.NodeInfo) msg.getPayload();
-                    //registrar con puerto principal y puerto HB
-                    node.getMembership().registerNode(info.getId(), info.getHost(), info.getPort() - 1);
+                    //el nodo queda anotado en la lista de miembros del coordinador
                     node.getMembership().registerNode(info.getId(), info.getHost(), info.getPort());
 
-                    node.getLogger().log("[CoordinatorNode] Nodo registrado: " + info.getId());
+                    node.getLogger().log("[CoordinatorNode] Nodo registrado: " + info.getId()
+                        + " (" + info.getHost() + ":" + info.getPort() + ")"
+                        + " | membresia=" + node.getMembership().getAliveNodes());
                     out.writeObject(new MessageWithClock(
                         node.getClock().tick(), "CoordinatorNode", "REGISTER_OK", null
                     ));

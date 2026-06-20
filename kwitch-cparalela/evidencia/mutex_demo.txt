@@ -1,0 +1,18 @@
+===== DEMO EXCLUSION MUTUA: A y B piden la CS a la vez =====
+[RA] Nodo_A pide CS (seq=1)
+[RA] Nodo_B pide CS (seq=1)
+[RA] Nodo_A recibe REQUEST de Nodo_B (seq=1)
+[RA] Nodo_B recibe REQUEST de Nodo_A (seq=1)
+[RA] Nodo_A ENTRA a CS (seq=1)
+>>> Nodo_A DENTRO de la seccion critica (recurso exclusivo)
+[RA] Nodo_B -> REPLY a Nodo_A (el tiene prioridad: 1<1)
+[RA] Nodo_A difiere REQUEST de Nodo_B (tengo prioridad: empate seq=1, gana id menor: Nodo_A<Nodo_B)
+<<< Nodo_A saliendo de la seccion critica
+[RA] Nodo_A SALE de CS (seq=1)
+[RA] Nodo_B recibe REPLY de Nodo_A
+[RA] Nodo_A envio REPLY pendiente a Nodo_B
+[RA] Nodo_B ENTRA a CS (seq=1)
+>>> Nodo_B DENTRO de la seccion critica (recurso exclusivo)
+<<< Nodo_B saliendo de la seccion critica
+[RA] Nodo_B SALE de CS (seq=1)
+===== FIN: la exclusion mutua impidio el solapamiento en la CS =====

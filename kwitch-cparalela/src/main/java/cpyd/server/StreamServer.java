@@ -6,6 +6,7 @@ import cpyd.distributed.MessageWithClock;
 import cpyd.distributed.NodeLogger;
 import cpyd.distributed.NodeMembership;
 import cpyd.distributed.RicartAgrawala;
+import cpyd.distributed.SafeObjectInputStream;
 import cpyd.handler.ClientHandler;
 import cpyd.loadtest.MetricsCollector;
 import cpyd.model.StreamSession;
@@ -18,6 +19,8 @@ import java.net.Socket;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 //objetivo
 
@@ -37,6 +40,12 @@ public class StreamServer {
     public static final int PORT = 5000;
     public static final int HB_PORT = 5001;
     public static final int RA_PORT = 5002;
+
+    //atendemos a cada cliente en un hilo de este pool. El tamano es fijo a
+    //proposito: limita cuantas conexiones se atienden a la vez para que el
+    //servidor no se quede sin memoria si llegan muchisimas conexiones de golpe.
+    public static final int MAX_CLIENTES = 200;
+    private static final ExecutorService clientPool = Executors.newFixedThreadPool(MAX_CLIENTES);
 
     public static final ConcurrentHashMap<String, StreamSession> activeSessions =
                                                     new ConcurrentHashMap<>();
@@ -91,8 +100,7 @@ public class StreamServer {
                 Socket clientSocket = serverSocket.accept();
                 logger.log("[StreamServer] Cliente conectado: " + clientSocket.getInetAddress());
                 ClientHandler handler = new ClientHandler(clientSocket);
-                Thread thread = new Thread(handler);
-                thread.start();
+                clientPool.execute(handler);
             }
         } catch (IOException e) {
             logger.error("[StreamServer] Error fatal del servidor: " + e.getMessage());
@@ -104,7 +112,7 @@ public class StreamServer {
             Socket socket = new Socket("localhost", 7000);
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
             out.flush();
-            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+            ObjectInputStream in = new SafeObjectInputStream(socket.getInputStream());
 
             NodeMembership.NodeInfo info = new NodeMembership.NodeInfo("StreamServer", "localhost", HB_PORT);
             int ts = clock.tick();

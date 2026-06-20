@@ -6,6 +6,7 @@ import cpyd.distributed.MessageWithClock;
 import cpyd.distributed.NodeLogger;
 import cpyd.distributed.NodeMembership;
 import cpyd.distributed.RicartAgrawala;
+import cpyd.distributed.SafeObjectInputStream;
 import cpyd.handler.ChatClientHandler;
 
 import java.io.ObjectInputStream;
@@ -34,8 +35,13 @@ public class ChatServer {
     private static final int HB_PORT = 6001;
     private static final int RA_PORT = 6002;
 
+    //pool de hilos fijo: cada conexion de chat se atiende en un hilo, pero con
+    //un tope para no quedarnos sin memoria si llegan demasiadas a la vez. Las
+    //conexiones que sobran esperan en cola en vez de crear hilos sin limite.
+    private static final int MAX_CLIENTES = 200;
+
     private final Map<String, List<ChatClientHandler>> channels = new ConcurrentHashMap<>();
-    private final ExecutorService threadPool = Executors.newCachedThreadPool();
+    private final ExecutorService threadPool = Executors.newFixedThreadPool(MAX_CLIENTES);
 
     private final LamportClock clock = new LamportClock();
     private final NodeMembership membership = new NodeMembership();
@@ -102,7 +108,7 @@ public class ChatServer {
             Socket socket = new Socket("localhost", 7000);
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
             out.flush();
-            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+            ObjectInputStream in = new SafeObjectInputStream(socket.getInputStream());
 
             NodeMembership.NodeInfo info = new NodeMembership.NodeInfo(nodeId, "localhost", HB_PORT);
             int ts = clock.tick();

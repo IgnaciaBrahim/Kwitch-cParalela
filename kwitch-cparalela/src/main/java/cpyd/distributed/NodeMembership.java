@@ -1,5 +1,6 @@
 package cpyd.distributed;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,8 +19,12 @@ saben que no pueden contar con el para coordinarse (Ricart-Agrawala).
 
 public class NodeMembership {
 
-    //un nodo se representa con su info basica
-    public static class NodeInfo {
+    //un nodo se representa con su info basica. Es Serializable porque viaja por
+    //la red dentro del mensaje REGISTER cuando un nodo se da a conocer al
+    //CoordinatorNode.
+    public static class NodeInfo implements Serializable {
+        private static final long serialVersionUID = 1L;
+
         private final String id;
         private final String host;
         private final int port;

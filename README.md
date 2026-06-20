@@ -31,6 +31,19 @@ Prueba de carga (requiere los 3 servidores corriendo):
 java -cp target/classes cpyd.loadtest.LoadGenerator
 ```
 
+Demo verificable de exclusión mutua distribuida (no necesita los servidores):
+```bash
+java -cp target/classes cpyd.demo.MutexDemo
+```
+
+## Evidencia
+
+La carpeta `kwitch-cparalela/evidencia/` guarda los resultados de la última prueba de tráfico:
+el reporte de métricas (`load_report.txt`), la salida de la demo de exclusión mutua
+(`mutex_demo.txt`), un extracto de los eventos clave (`snippets_clave.txt`) y los logs completos
+de cada nodo (marcas Lamport, rondas Ricart-Agrawala, detección de la falla inducida). Son los
+logs que pide la rúbrica como entregable de la prueba de carga.
+
 ---
 
 ## Estructura del proyecto — qué hace cada archivo
@@ -49,8 +62,8 @@ java -cp target/classes cpyd.loadtest.LoadGenerator
 
 | Archivo | Qué hace | Si hay error en... |
 |---|---|---|
-| `StreamServer.java` | Puerto 5000. Acepta conexiones de streamers y viewers. Tiene los mapas `activeSessions` y `subscribers`. Registra los 3 nodos en la membresía, inicia HeartbeatMonitor y RicartAgrawala | La conexión de clientes al puerto 5000, el registro de canales |
-| `ChatServer.java` | Puerto 6000. Acepta conexiones de chat. Tiene reloj Lamport, HeartbeatMonitor y RicartAgrawala (votante). Registra con CoordinatorNode | La conexión de viewers al chat, el broadcast de mensajes |
+| `StreamServer.java` | Puerto 5000. Acepta conexiones de streamers y viewers con un **pool acotado** (`newFixedThreadPool(200)`, mitigación DoS). Tiene los mapas `activeSessions` y `subscribers`. Registra los 3 nodos en la membresía, inicia HeartbeatMonitor y RicartAgrawala. Responde `GET_METRICS` con el conteo real de coordinación | La conexión de clientes al puerto 5000, el registro de canales |
+| `ChatServer.java` | Puerto 6000. Acepta conexiones de chat con un **pool acotado** (`newFixedThreadPool(200)`). Tiene reloj Lamport, HeartbeatMonitor y RicartAgrawala (votante). Registra con CoordinatorNode | La conexión de viewers al chat, el broadcast de mensajes |
 
 ### `handler/` — Lógica por cada cliente conectado
 
@@ -75,8 +88,15 @@ java -cp target/classes cpyd.loadtest.LoadGenerator
 | `NodeMembership.java` | Mapa de nodos con estado ALIVE/FAILED. Métodos: registerNode, markFailed, markAlive, getAliveNodes | La detección de nodos caídos, la membresía |
 | `NodeLogger.java` | Escribe logs a `logs/node_Nombre.log` y también a consola. Tiene `log()`, `error()`, `logLamport()` | Los logs que se entregan en el informe |
 | `HeartbeatMonitor.java` | 3 hilos: sender (cada 5s manda HEARTBEAT), receiver (ServerSocket, recibe HEARTBEAT), checker (cada 5s revisa timeout de 15s, marca FAILED) | La detección de caídas de servidores |
-| `RicartAgrawala.java` | Exclusión mutua distribuida. Estados: LIBRE, DESEADO, TOMADO. requestCS() pide permiso a nodos activos, releaseCS() libera. Usa timestamps Lamport para prioridad | La coordinación entre nodos para crear canales |
+| `RicartAgrawala.java` | Exclusión mutua distribuida. Estados: LIBRE, DESEADO, TOMADO. requestCS() pide permiso a nodos activos, releaseCS() libera. Usa timestamps Lamport para prioridad. **ReentrantLock local** serializa a los hilos del mismo nodo (no corrompe el estado bajo carga) | La coordinación entre nodos para crear canales |
 | `CoordinatorNode.java` | Puerto 7000. Recibe REGISTER (nuevos nodos), MEMBERSHIP (consulta de activos), DIE (apagado inducido). Participa como votante en Ricart-Agrawala | La tercera terminal, el registro de nodos, la falla inducida |
+| `SafeObjectInputStream.java` | **Mitigación de seguridad**: deserialización con whitelist (`resolveClass`/`resolveProxyClass`). Solo acepta clases de `cpyd.*`, `java.lang.*`, `java.util.*`, `java.time.*`. Usado en todos los lectores de red | La defensa contra inyección de clases / RCE |
+
+### `demo/` — Demostración aislada
+
+| Archivo | Qué hace | Si hay error en... |
+|---|---|---|
+| `MutexDemo.java` | Levanta dos nodos en una JVM que piden la sección crítica a la vez; muestra REQUEST/REPLY/diferir/RELEASE y que nunca entran ambos a la CS | La verificación visible de la exclusión mutua |
 
 ### `loadtest/` — Prueba de carga
 

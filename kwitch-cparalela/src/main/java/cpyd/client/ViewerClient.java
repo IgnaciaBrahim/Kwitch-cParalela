@@ -1,5 +1,6 @@
 package cpyd.client;
 
+import cpyd.distributed.SafeObjectInputStream;
 import cpyd.model.ChatMessage;
 import cpyd.model.ResponseStatus;
 import cpyd.model.ServerResponse;
@@ -81,7 +82,7 @@ public class ViewerClient {
         try (Socket socket = new Socket(HOST, STREAM_PORT)) {
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
             out.flush();
-            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+            ObjectInputStream in = new SafeObjectInputStream(socket.getInputStream());
 
             // Comando para solicitar la lista
             out.writeObject("LIST_CHANNELS");
@@ -111,11 +112,29 @@ public class ViewerClient {
             try (Socket streamSocket = new Socket(HOST, STREAM_PORT)) {
                 ObjectOutputStream out = new ObjectOutputStream(streamSocket.getOutputStream());
                 out.flush();
-                ObjectInputStream in = new ObjectInputStream(streamSocket.getInputStream());
+                ObjectInputStream in = new SafeObjectInputStream(streamSocket.getInputStream());
 
                 // Suscripción al canal
                 out.writeObject(targetChannel);
                 out.flush();
+
+                // Cada 20s le mandamos un "PING" al StreamServer para avisarle que
+                // seguimos conectados. Si dejamos de enviarlo, el servidor nota el
+                // silencio por timeout y nos da de baja.
+                Thread keepAlive = new Thread(() -> {
+                    try {
+                        while (!streamSocket.isClosed()) {
+                            Thread.sleep(20000);
+                            out.writeObject("PING");
+                            out.flush();
+                            out.reset();
+                        }
+                    } catch (Exception e) {
+                        //la conexion se cerro; el hilo termina solo
+                    }
+                }, "viewer-keepalive");
+                keepAlive.setDaemon(true);
+                keepAlive.start();
 
                 while (!streamSocket.isClosed()) {
                     Object response = in.readObject();
@@ -158,7 +177,7 @@ public class ViewerClient {
             chatSocket = new Socket(HOST, CHAT_PORT);
             chatOut = new ObjectOutputStream(chatSocket.getOutputStream());
             chatOut.flush();
-            ObjectInputStream chatIn = new ObjectInputStream(chatSocket.getInputStream());
+            ObjectInputStream chatIn = new SafeObjectInputStream(chatSocket.getInputStream());
 
             chatOut.writeObject(new ChatMessage(username, targetChannel, "se ha unido al chat."));
             chatOut.flush();

@@ -1,6 +1,7 @@
 package cpyd.handler;
 
 import cpyd.distributed.RicartAgrawala;
+import cpyd.distributed.SafeObjectInputStream;
 import cpyd.model.ResponseStatus;
 import cpyd.model.ServerResponse;
 import cpyd.model.StreamSession;
@@ -59,7 +60,7 @@ public class ClientHandler implements Runnable {
             out = new ObjectOutputStream(socket.getOutputStream());
             //no deadlock por header!
             out.flush();
-            in  = new ObjectInputStream(socket.getInputStream());
+            in  = new SafeObjectInputStream(socket.getInputStream());
 
             //El primer mensaje determina si es streamer o viewer o si solicita lista de canales
             Object first = in.readObject();
@@ -77,6 +78,11 @@ public class ClientHandler implements Runnable {
                     out.writeObject(channels);
                     out.flush();
                     // Termina la ejecución para que el bloque finally cierre este socket temporal
+                } else if ("GET_METRICS".equals(request)) {
+                    // El generador de carga pide cuantos mensajes de coordinacion
+                    // (Ricart-Agrawala) lleva el servidor, para el reporte de metricas.
+                    out.writeObject(StreamServer.metrics.getCoordinationMsgCount());
+                    out.flush();
                 } else {
                     // Si no es LIST_CHANNELS, asume que es el nombre del canal para suscribirse
                     role = "VIEWER";
@@ -156,14 +162,14 @@ public class ClientHandler implements Runnable {
     }
 
     //logica del viewer
-    private void handleViewer(String channelName) throws IOException, Exception {
+    private void handleViewer(String channelName) throws IOException, ClassNotFoundException {
         //nombre del canal
         this.channelName = channelName;
 
         //el viewer no se puede conectar a un stream de un canal que no esta en stream
         //solo hay mensaje, no hay payload
         if (!StreamServer.activeSessions.containsKey(channelName)) {
-            send(new ServerResponse(ResponseStatus.ERROR, "Canal no encontrado: " + channelName, 
+            send(new ServerResponse(ResponseStatus.ERROR, "Canal no encontrado: " + channelName,
                                                                                                 null));
             return;
         }
@@ -179,21 +185,20 @@ public class ClientHandler implements Runnable {
         send(new ServerResponse(ResponseStatus.OK, "Suscrito a: " + channelName, current));
         System.out.println("[StreamServer] Espectador suscrito a: " + channelName);
 
-        //el hilo espera alguna notificacion, que puede venir como broadcast
-        //solo va a terminar si detecta que el socket se cierra
-        try {
-            //delay
-            while (!socket.isClosed()) {
-                try {
-                    Thread.sleep(3000);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break; //salir del loop si el hilo fue interrumpido
-                }
+        /*El viewer no manda datos de la aplicacion (solo recibe el broadcast),
+        pero envia un "PING" cada cierto tiempo. Nos quedamos bloqueados en
+        readObject() esperando ese ping: si el viewer se cae, salta una
+        excepcion de socket (la atrapa run()); si se queda colgado y deja de
+        mandar pings, salta el timeout. En cualquier caso salimos del bucle y
+        el finally -> cleanup() lo saca de la lista de suscriptores.*/
+        while (true) {
+            try {
+                Object keepAlive = in.readObject(); //es el ping del viewer; no nos interesa el contenido
+                if (keepAlive == null) break;
+            } catch (SocketTimeoutException e) {
+                System.out.println("[StreamServer] Viewer inactivo en: " + channelName);
+                break;
             }
-        } catch (Exception e) {
-            Thread.currentThread().interrupt();
-            throw new Exception("[ClientHandler] Exception en el ClientHandler, thread interrumpido");
         }
     }
 

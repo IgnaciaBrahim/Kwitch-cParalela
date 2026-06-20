@@ -1,0 +1,13 @@
+# Compilados de Maven / Java
+kwitch-cparalela/target/
+*.class
+
+# Logs generados en tiempo de ejecucion (la evidencia "oficial" va en evidencia/)
+kwitch-cparalela/logs/
+
+# Archivos de IDE / SO
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db

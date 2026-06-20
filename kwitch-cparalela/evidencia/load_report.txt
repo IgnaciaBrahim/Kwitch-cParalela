@@ -1,0 +1,29 @@
+========== GENERADOR DE CARGA ==========
+Hilos: 50 | Duracion: 65s
+Coordinador: localhost:7000
+DIE programado a los 30s
+
+[Carga] Todos los hilos listos. Iniciando en 1 segundo...
+
+[Carga] Enviando DIE al CoordinatorNode...
+[Carga] DIE enviado. Midiendo recuperacion...
+[Carga] Sistema recuperado en ~2554ms
+
+[Carga] Prueba terminada.
+
+========== REPORTE DE MÉTRICAS ==========
+Peticiones totales:      7710
+Throughput:              116.55 req/s
+Latencia promedio:       167.90 ms
+Latencia P95:            333.38 ms
+Tasa de error:           0.00%
+Mensajes coordinación:   0
+==========================================
+
+Tiempo de recuperacion:   2554 ms
+==========================================
+
+Msjs coordinacion (real): 11292  <- conteo exacto del StreamServer (Ricart-Agrawala)
+(detalle evento por evento en logs/node_StreamServer.log)
+==========================================
+

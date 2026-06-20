@@ -1,6 +1,7 @@
 package cpyd.loadtest;
 
 import cpyd.distributed.MessageWithClock;
+import cpyd.distributed.SafeObjectInputStream;
 import cpyd.model.ChatMessage;
 import cpyd.model.ServerResponse;
 import cpyd.model.StreamSession;
@@ -102,13 +103,35 @@ public class LoadGenerator {
             System.out.println("==========================================\n");
         }
 
-        //estimar mensajes de coordinacion
-        long canalesCreados = metrics.getTotalRequests() / 5; //aproximado
-        long msjsCoordinacion = canalesCreados * 6; //2 REQUEST + 2 REPLY + 2 RELEASE por canal
-        System.out.println("Canales creados (est.):   " + canalesCreados);
-        System.out.println("Msjs coordinacion (est.): " + msjsCoordinacion);
-        System.out.println("(ver logs/node_StreamServer.log para el valor exacto)");
+        //le preguntamos al StreamServer el conteo real de mensajes de coordinacion
+        long coordReal = queryCoordinationCount();
+        if (coordReal >= 0) {
+            System.out.println("Msjs coordinacion (real): " + coordReal
+                + "  <- conteo exacto del StreamServer (Ricart-Agrawala)");
+        } else {
+            System.out.println("Msjs coordinacion: no disponible (StreamServer no respondio)");
+        }
+        System.out.println("(detalle evento por evento en logs/node_StreamServer.log)");
         System.out.println("==========================================\n");
+    }
+
+    /*pregunta al StreamServer cuantos mensajes de coordinacion (Ricart-Agrawala)
+    genero realmente durante la prueba. Devuelve -1 si no se pudo obtener.*/
+    private long queryCoordinationCount() {
+        try (Socket socket = new Socket(HOST, STREAM_PORT)) {
+            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+            out.flush();
+            ObjectInputStream in = new SafeObjectInputStream(socket.getInputStream());
+            out.writeObject("GET_METRICS");
+            out.flush();
+            Object resp = in.readObject();
+            if (resp instanceof Long valor) {
+                return valor;
+            }
+        } catch (Exception e) {
+            //StreamServer no disponible: se reporta como no disponible
+        }
+        return -1;
     }
 
     /*cada hilo de carga simula un streamer+viewer*/
@@ -150,7 +173,7 @@ public class LoadGenerator {
             Socket socket = new Socket(HOST, STREAM_PORT);
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
             out.flush();
-            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+            ObjectInputStream in = new SafeObjectInputStream(socket.getInputStream());
 
             StreamSession session = new StreamSession(streamerId, channelName,
                 "Canal de prueba " + channelName, "Prueba",
@@ -174,7 +197,7 @@ public class LoadGenerator {
             Socket streamSocket = new Socket(HOST, STREAM_PORT);
             ObjectOutputStream streamOut = new ObjectOutputStream(streamSocket.getOutputStream());
             streamOut.flush();
-            ObjectInputStream streamIn = new ObjectInputStream(streamSocket.getInputStream());
+            ObjectInputStream streamIn = new SafeObjectInputStream(streamSocket.getInputStream());
 
             streamOut.writeObject(channelName);
             streamOut.flush();
@@ -185,7 +208,7 @@ public class LoadGenerator {
             Socket chatSocket = new Socket(HOST, CHAT_PORT);
             ObjectOutputStream chatOut = new ObjectOutputStream(chatSocket.getOutputStream());
             chatOut.flush();
-            ObjectInputStream chatIn = new ObjectInputStream(chatSocket.getInputStream());
+            ObjectInputStream chatIn = new SafeObjectInputStream(chatSocket.getInputStream());
 
             //mensaje de entrada
             chatOut.writeObject(new ChatMessage(username, channelName, "se ha unido a la carga"));
@@ -220,7 +243,7 @@ public class LoadGenerator {
             Socket socket = new Socket(HOST, COORD_PORT);
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
             out.flush();
-            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+            ObjectInputStream in = new SafeObjectInputStream(socket.getInputStream());
             MessageWithClock dieMsg = new MessageWithClock(0, "LoadGenerator", "DIE", null);
             out.writeObject(dieMsg);
             out.flush();
@@ -242,7 +265,7 @@ public class LoadGenerator {
             long t1 = System.nanoTime();
             try (Socket s = new Socket(HOST, STREAM_PORT)) {
                 ObjectOutputStream o = new ObjectOutputStream(s.getOutputStream()); o.flush();
-                ObjectInputStream in = new ObjectInputStream(s.getInputStream());
+                ObjectInputStream in = new SafeObjectInputStream(s.getInputStream());
                 o.writeObject("LIST_CHANNELS"); o.flush();
                 in.readObject();
                 long lat = (System.nanoTime() - t1) / 1_000_000;
