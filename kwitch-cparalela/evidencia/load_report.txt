@@ -7,23 +7,32 @@ DIE programado a los 30s
 
 [Carga] Enviando DIE al CoordinatorNode...
 [Carga] DIE enviado. Midiendo recuperacion...
-[Carga] Sistema recuperado en ~2554ms
+[Carga] Sistema recuperado en ~2542ms
 
 [Carga] Prueba terminada.
 
-========== REPORTE DE MÉTRICAS ==========
-Peticiones totales:      7710
-Throughput:              116.55 req/s
-Latencia promedio:       167.90 ms
-Latencia P95:            333.38 ms
-Tasa de error:           0.00%
-Mensajes coordinación:   0
+========== REPORTE DE MÃ‰TRICAS ==========
+Peticiones totales:      7742
+Throughput:              117,04 req/s
+Latencia promedio:       168,46 ms
+Latencia P95:            326,49 ms
+Tasa de error:           0,00%
+Mensajes coordinaciÃ³n:   0
 ==========================================
 
-Tiempo de recuperacion:   2554 ms
+(Nota: 'Mensajes coordinacion' sale 0 porque ese contador vive en este proceso del generador de carga, que no participa en Ricart-Agrawala. El conteo real, medido en el StreamServer, se imprime mas abajo.)
+
+Tiempo de recuperacion:   2542 ms
 ==========================================
 
-Msjs coordinacion (real): 11292  <- conteo exacto del StreamServer (Ricart-Agrawala)
+
+===== METRICAS POR VENTANA (impacto de la falla inducida) =====
+ANTES de la falla     -> peticiones=3600 | error=0,00% | latencia avg=166,12ms | p95=326,05ms
+DURANTE la caida      -> peticiones=300 | error=0,00% | latencia avg=217,64ms | p95=344,55ms
+DESPUES de recuperado -> peticiones=3842 | error=0,00% | latencia avg=166,81ms | p95=326,15ms
+=================================================================
+
+Msjs coordinacion (real): 11342  <- conteo exacto del StreamServer (Ricart-Agrawala)
 (detalle evento por evento en logs/node_StreamServer.log)
 ==========================================
 

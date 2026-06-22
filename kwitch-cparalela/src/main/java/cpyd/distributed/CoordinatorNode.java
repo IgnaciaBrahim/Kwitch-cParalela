@@ -5,6 +5,8 @@ import java.io.ObjectOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 
 /*tercer nodo del sistema (puerto 7000). Sirve como punto de coordinacion
@@ -21,6 +23,11 @@ public class CoordinatorNode {
     private static final int PORT = 7000;
     private static final int HB_PORT = 7001;
     private static final int RA_PORT = 7002;
+
+    //mismo criterio que StreamServer/ChatServer: pool acotado para no quedarse
+    //sin hilos si llegan muchas conexiones de golpe (mitigacion DoS)
+    private static final int MAX_CLIENTES = 200;
+    private static final ExecutorService clientPool = Executors.newFixedThreadPool(MAX_CLIENTES);
 
     private final NodeMembership membership = new NodeMembership();
     private final LamportClock clock = new LamportClock();
@@ -63,8 +70,7 @@ public class CoordinatorNode {
             while (true) {
                 Socket socket = serverSocket.accept();
                 CoordinatorHandler handler = new CoordinatorHandler(socket, this);
-                Thread thread = new Thread(handler);
-                thread.start();
+                clientPool.execute(handler);
             }
 
         } catch (Exception e) {

@@ -24,6 +24,12 @@ public class MetricsCollector {
     private final AtomicLong coordinationMessages = new AtomicLong(0);
     private final long startTime;
 
+    //cada muestra ademas guarda el instante (epoch ms) en que se completo,
+    //para poder separar despues las peticiones de antes/durante/despues de
+    //una falla inducida. No se usa en getThroughput/getAvgLatency/getP95 ni
+    //en printReport(), asi que no cambia ninguno de esos resultados.
+    private final ConcurrentLinkedQueue<long[]> samples = new ConcurrentLinkedQueue<>();
+
     public MetricsCollector() {
         this.startTime = System.currentTimeMillis();
     }
@@ -35,6 +41,7 @@ public class MetricsCollector {
         if (!success) {
             failedRequests.incrementAndGet();
         }
+        samples.add(new long[]{System.currentTimeMillis(), latencyNanos, success ? 1 : 0});
     }
 
     //cuenta un mensaje de coordinacion (REQUEST, REPLY o RELEASE)
@@ -98,5 +105,63 @@ public class MetricsCollector {
         System.out.println("Tasa de error:           " + String.format("%.2f", getErrorRate()) + "%");
         System.out.println("Mensajes coordinación:   " + coordinationMessages.get());
         System.out.println("==========================================\n");
+    }
+
+    /*separa las peticiones en tres ventanas de tiempo (antes de la falla,
+    durante la caida del nodo, despues de la recuperacion) y muestra el
+    throughput/latencia/error de cada una por separado.
+
+    Es un detalle adicional a printReport(): en el promedio global de toda
+    la prueba el impacto de la falla casi no se nota porque son pocas
+    peticiones frente al total, y por eso conviene mostrarlo aparte.*/
+    public void printPhaseReport(long failTimeMillis, long recoveryTimeMillis) {
+        List<long[]> antes = new ArrayList<>();
+        List<long[]> durante = new ArrayList<>();
+        List<long[]> despues = new ArrayList<>();
+
+        for (long[] s : samples) {
+            long ts = s[0];
+            if (ts < failTimeMillis) {
+                antes.add(s);
+            } else if (ts <= recoveryTimeMillis) {
+                durante.add(s);
+            } else {
+                despues.add(s);
+            }
+        }
+
+        System.out.println("\n===== METRICAS POR VENTANA (impacto de la falla inducida) =====");
+        imprimirVentana("ANTES de la falla    ", antes);
+        imprimirVentana("DURANTE la caida     ", durante);
+        imprimirVentana("DESPUES de recuperado", despues);
+        System.out.println("=================================================================\n");
+    }
+
+    private void imprimirVentana(String nombre, List<long[]> muestras) {
+        if (muestras.isEmpty()) {
+            System.out.println(nombre + " -> sin peticiones registradas en esta ventana");
+            return;
+        }
+
+        long total = muestras.size();
+        long fallidas = 0;
+        List<Long> lats = new ArrayList<>();
+        for (long[] s : muestras) {
+            if (s[2] == 0) fallidas++;
+            lats.add(s[1]);
+        }
+        Collections.sort(lats);
+
+        double errorRate = (double) fallidas / total * 100.0;
+        long sum = 0;
+        for (long lat : lats) sum += lat;
+        double avgMs = (sum / (double) total) / 1_000_000.0;
+        int idx = (int) Math.ceil(0.95 * lats.size()) - 1;
+        double p95Ms = lats.get(Math.max(0, idx)) / 1_000_000.0;
+
+        System.out.println(nombre + " -> peticiones=" + total
+            + " | error=" + String.format("%.2f", errorRate) + "%"
+            + " | latencia avg=" + String.format("%.2f", avgMs) + "ms"
+            + " | p95=" + String.format("%.2f", p95Ms) + "ms");
     }
 }

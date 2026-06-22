@@ -4,6 +4,7 @@ import cpyd.loadtest.MetricsCollector;
 
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.List;
@@ -68,6 +69,12 @@ public class RicartAgrawala {
     //siempre cuando hay mucha carga.
     private final ReentrantLock localCs = new ReentrantLock(true);
 
+    //igual que en HeartbeatMonitor: sin esto, connect() a un peer que se
+    //volvio inalcanzable (no solo que cerro el puerto) podria colgar
+    //requestCS()/releaseCS() mucho mas que lo que tarda el heartbeat en
+    //notar la caida.
+    private static final int CONNECT_TIMEOUT_MS = 3000;
+
     public RicartAgrawala(String myId, int myPort,
                           List<PeerInfo> peers,
                           NodeMembership membership,
@@ -110,7 +117,8 @@ public class RicartAgrawala {
             }
 
             try {
-                Socket socket = new Socket(peer.getHost(), peer.getPort());
+                Socket socket = new Socket();
+                socket.connect(new InetSocketAddress(peer.getHost(), peer.getPort()), CONNECT_TIMEOUT_MS);
                 ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
                 out.flush();
                 ObjectInputStream in = new SafeObjectInputStream(socket.getInputStream());
@@ -177,7 +185,8 @@ public class RicartAgrawala {
                 for (PeerInfo peer : peers) {
                     if (peer.getId().equals(peerId)) {
                         try {
-                            Socket socket = new Socket(peer.getHost(), peer.getPort());
+                            Socket socket = new Socket();
+                            socket.connect(new InetSocketAddress(peer.getHost(), peer.getPort()), CONNECT_TIMEOUT_MS);
                             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
                             out.flush();
 

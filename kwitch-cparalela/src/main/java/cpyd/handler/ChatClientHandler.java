@@ -14,6 +14,7 @@ import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.List;
 import java.util.concurrent.PriorityBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 /*maneja la conexion de un viewer en el chat.
 
@@ -88,11 +89,20 @@ public class ChatClientHandler implements Runnable {
     }
 
     /*hilo que lee de la cola ordenada y escribe al viewer.
-    Los mensajes se entregan en orden ascendente de Lamport.*/
+    Los mensajes se entregan en orden ascendente de Lamport.
+
+    Usa poll() con timeout en vez de take(): si el canal no tiene otros
+    participantes, este handler nunca recibe un broadcast y take() se
+    quedaria bloqueado para siempre, incluso despues de que el cliente
+    se desconecte. Eso filtraba un hilo nativo por cada conexion de chat
+    que no recibia mensajes, hasta agotar los hilos del sistema operativo
+    bajo carga sostenida. Con poll() el hilo revisa cada 2s si el socket
+    ya se cerro y termina solo.*/
     private void deliveryLoop() {
         try {
             while (!socket.isClosed()) {
-                MessageWithClock msg = deliveryQueue.take(); //bloquea hasta que haya algo
+                MessageWithClock msg = deliveryQueue.poll(2, TimeUnit.SECONDS);
+                if (msg == null) continue; //nada que entregar, reintentar
                 ChatMessage chatMessage = (ChatMessage) msg.getPayload();
                 out.writeObject(chatMessage);
                 out.flush();

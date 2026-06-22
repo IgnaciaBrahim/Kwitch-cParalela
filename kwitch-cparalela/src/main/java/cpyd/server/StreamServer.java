@@ -14,6 +14,7 @@ import cpyd.model.StreamSession;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.List;
@@ -109,7 +110,8 @@ public class StreamServer {
 
     private static void registerWithCoordinator() {
         try {
-            Socket socket = new Socket("localhost", 7000);
+            Socket socket = new Socket();
+            socket.connect(new InetSocketAddress("localhost", 7000), 3000);
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
             out.flush();
             ObjectInputStream in = new SafeObjectInputStream(socket.getInputStream());

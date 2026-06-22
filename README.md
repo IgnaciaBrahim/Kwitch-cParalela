@@ -87,9 +87,9 @@ logs que pide la rúbrica como entregable de la prueba de carga.
 | `MessageWithClock.java` | Envuelve cualquier mensaje con timestamp, senderId, type y payload. Es el formato estándar entre nodos | La comunicación entre servidores |
 | `NodeMembership.java` | Mapa de nodos con estado ALIVE/FAILED. Métodos: registerNode, markFailed, markAlive, getAliveNodes | La detección de nodos caídos, la membresía |
 | `NodeLogger.java` | Escribe logs a `logs/node_Nombre.log` y también a consola. Tiene `log()`, `error()`, `logLamport()` | Los logs que se entregan en el informe |
-| `HeartbeatMonitor.java` | 3 hilos: sender (cada 5s manda HEARTBEAT), receiver (ServerSocket, recibe HEARTBEAT), checker (cada 5s revisa timeout de 15s, marca FAILED) | La detección de caídas de servidores |
+| `HeartbeatMonitor.java` | 3 hilos: sender (cada 2s manda HEARTBEAT), receiver (ServerSocket, recibe HEARTBEAT), checker (cada 2s revisa timeout de 6s, marca FAILED) | La detección de caídas de servidores |
 | `RicartAgrawala.java` | Exclusión mutua distribuida. Estados: LIBRE, DESEADO, TOMADO. requestCS() pide permiso a nodos activos, releaseCS() libera. Usa timestamps Lamport para prioridad. **ReentrantLock local** serializa a los hilos del mismo nodo (no corrompe el estado bajo carga) | La coordinación entre nodos para crear canales |
-| `CoordinatorNode.java` | Puerto 7000. Recibe REGISTER (nuevos nodos), MEMBERSHIP (consulta de activos), DIE (apagado inducido). Participa como votante en Ricart-Agrawala | La tercera terminal, el registro de nodos, la falla inducida |
+| `CoordinatorNode.java` | Puerto 7000. Recibe REGISTER (nuevos nodos), MEMBERSHIP (consulta de activos), DIE (apagado inducido). Participa como votante en Ricart-Agrawala. Atiende cada conexión en un **pool acotado** (`newFixedThreadPool(200)`), igual que StreamServer y ChatServer | La tercera terminal, el registro de nodos, la falla inducida |
 | `SafeObjectInputStream.java` | **Mitigación de seguridad**: deserialización con whitelist (`resolveClass`/`resolveProxyClass`). Solo acepta clases de `cpyd.*`, `java.lang.*`, `java.util.*`, `java.time.*`. Usado en todos los lectores de red | La defensa contra inyección de clases / RCE |
 
 ### `demo/` — Demostración aislada
@@ -125,6 +125,7 @@ logs que pide la rúbrica como entregable de la prueba de carga.
 | **Membresía** | Los 3 nodos se registran mutuamente al iniciar. Además envían REGISTER al CoordinatorNode y re-registran cada 30s |
 | **Lamport** | LC1: `clock.tick()` antes de enviar. LC2: `clock.update(n)` al recibir. PriorityBlockingQueue ordena por (timestamp, senderId) |
 | **Ricart-Agrawala** | requestCS() multicasts REQUEST a `getAliveNodes()`, espera REPLY, entra a CS. releaseCS() envía REPLY a diferidos |
-| **Heartbeat** | Sender cada 5s, receiver con ServerSocket, checker cada 5s con timeout 15s → `markFailed()` |
-| **Recuperación** | Heartbeat entrante → `markAlive()`. Re-registro cada 30s al CoordinatorNode |
-| **Falla inducida** | DIE al puerto 7000. LoadGenerator mide recuperación con rolling window de 20 latencias |
+| **Heartbeat** | Sender cada 2s, receiver con ServerSocket, checker cada 2s con timeout 6s → `markFailed()` |
+| **Recuperación** | Heartbeat entrante → `markAlive()` (queda como "REINTEGRADO" en el log). Re-registro cada 30s al CoordinatorNode |
+| **Falla inducida** | DIE al puerto 7000. LoadGenerator mide recuperación con rolling window de 20 latencias, y separa las métricas en antes/durante/después de la falla |
+| **Timeout de conexión** | Todo `connect()` saliente (heartbeat, Ricart-Agrawala, registro) tiene un límite de 3s. Sin esto, un nodo inalcanzable por red (no solo con el proceso muerto) podría colgar la espera mucho más que lo que tarda el heartbeat en detectarlo — es la diferencia entre falla por *crash* y falla por *omisión* |
