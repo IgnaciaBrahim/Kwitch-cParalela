@@ -95,12 +95,24 @@ public class LoadGenerator {
 
         //imprimir reporte
         metrics.printReport();
+        System.out.println("(Nota: 'Mensajes coordinacion' sale 0 porque ese contador vive en este"
+            + " proceso del generador de carga, que no participa en Ricart-Agrawala. El conteo"
+            + " real, medido en el StreamServer, se imprime mas abajo.)\n");
 
         //imprimir recuperacion si hubo falla
         if (fallaInducida && recoveryTime > 0) {
             long recuperacionMs = recoveryTime - fallaTime;
             System.out.println("Tiempo de recuperacion:   " + recuperacionMs + " ms");
             System.out.println("==========================================\n");
+        }
+
+        //metricas separadas por ventana: el promedio global de arriba diluye
+        //el efecto de la falla porque son pocas peticiones frente al total
+        //de toda la prueba. Si no se detecto recuperacion, se usa el fin de
+        //la prueba como limite de la ventana "durante".
+        if (fallaInducida) {
+            long limiteVentana = recoveryTime > 0 ? recoveryTime : System.currentTimeMillis();
+            metrics.printPhaseReport(fallaTime, limiteVentana);
         }
 
         //le preguntamos al StreamServer el conteo real de mensajes de coordinacion

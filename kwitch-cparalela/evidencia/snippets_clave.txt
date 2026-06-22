@@ -1,25 +1,32 @@
 ### Discovery (CoordinatorNode)
-[CoordinatorNode] Nodo registrado: ChatServer (localhost:6001) | membresia=[ChatServer, CoordinatorNode, StreamServer]
 [CoordinatorNode] Nodo registrado: StreamServer (localhost:5001) | membresia=[ChatServer, CoordinatorNode, StreamServer]
+[CoordinatorNode] Nodo registrado: ChatServer (localhost:6001) | membresia=[ChatServer, CoordinatorNode, StreamServer]
 
 ### Ricart-Agrawala (StreamServer)
-[RA] StreamServer pide CS (seq=17)
-[RA] StreamServer ENTRA a CS (seq=17)
-[RA] StreamServer SALE de CS (seq=17)
-[RA] StreamServer pide CS (seq=22)
-[RA] StreamServer ENTRA a CS (seq=22)
-[RA] StreamServer SALE de CS (seq=22)
+[RA] StreamServer pide CS (seq=54)
+[RA] StreamServer ENTRA a CS (seq=54)
+[RA] StreamServer SALE de CS (seq=54)
+[RA] StreamServer pide CS (seq=59)
+[RA] StreamServer ENTRA a CS (seq=59)
+[RA] StreamServer SALE de CS (seq=59)
 
 ### Lamport en chat (ChatServer)
-[LAMPORT=31] [ChatServer] [CHAT] canal_44 <Carga_44>: se ha unido a la carga
-[LAMPORT=40] [ChatServer] [CHAT] canal_45 <Carga_45>: se ha unido a la carga
-[LAMPORT=35] [ChatServer] [CHAT] canal_1 <Carga_1>: se ha unido a la carga
-[LAMPORT=30] [ChatServer] [CHAT] canal_33 <Carga_33>: se ha unido a la carga
+[LAMPORT=72] [ChatServer] [CHAT] canal_8 <Carga_8>: se ha unido a la carga
+[LAMPORT=67] [ChatServer] [CHAT] canal_39 <Carga_39>: se ha unido a la carga
+[LAMPORT=73] [ChatServer] [CHAT] canal_39 <Carga_39>: Mensaje de carga #0 desde Carga_39
+[LAMPORT=74] [ChatServer] [CHAT] canal_8 <Carga_8>: Mensaje de carga #0 desde Carga_8
 
 ### Falla inducida + deteccion (StreamServer)
-[Heartbeat] Nodo CoordinatorNode marcado como FAILED (sin heartbeat por 7998ms)
-[RA] CoordinatorNode esta FAILED, se saltea
+[Heartbeat] Nodo CoordinatorNode marcado como FAILED (sin heartbeat por 7941ms)
 [RA] CoordinatorNode esta FAILED, se saltea
 
 ### DIE (CoordinatorNode)
 [CoordinatorNode] Recibido DIE. Apagando...
+
+### Metricas por ventana (load_report.txt) - impacto real de la falla
+ANTES de la falla     -> peticiones=3600 | error=0,00% | latencia avg=166,12ms | p95=326,05ms
+DURANTE la caida      -> peticiones=300  | error=0,00% | latencia avg=217,64ms | p95=344,55ms
+DESPUES de recuperado -> peticiones=3842 | error=0,00% | latencia avg=166,81ms | p95=326,15ms
+
+### Reintegracion (CoordinatorNode vuelve a levantarse despues de la prueba)
+[Heartbeat] Nodo CoordinatorNode REINTEGRADO (volvio a latir)

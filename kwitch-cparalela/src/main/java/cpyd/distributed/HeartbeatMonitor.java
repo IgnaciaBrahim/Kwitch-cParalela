@@ -2,6 +2,7 @@ package cpyd.distributed;
 
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.List;
@@ -30,6 +31,13 @@ public class HeartbeatMonitor {
     //perdidos) lo damos por caido
     private final int interval = 2000;
     private final int timeout  = 6000;
+
+    //limite para que connect() no se quede colgado si el peer esta
+    //inalcanzable de verdad (red caida) en vez de solo con el proceso
+    //muerto. En localhost el rechazo es instantaneo, pero en una red real
+    //una falla de omision puede dejar el connect() esperando bastante mas
+    //que esto si no se le pone un limite explicito.
+    private static final int CONNECT_TIMEOUT_MS = 3000;
 
     private final ConcurrentHashMap<String, Long> lastHeartbeat = new ConcurrentHashMap<>();
     private volatile boolean running = false;
@@ -81,7 +89,8 @@ public class HeartbeatMonitor {
 
             for (NodeMembership.NodeInfo peer : peers) {
                 try {
-                    Socket socket = new Socket(peer.getHost(), peer.getPort());
+                    Socket socket = new Socket();
+                    socket.connect(new InetSocketAddress(peer.getHost(), peer.getPort()), CONNECT_TIMEOUT_MS);
                     ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
                     out.flush();
                     ObjectInputStream in = new SafeObjectInputStream(socket.getInputStream());

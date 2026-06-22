@@ -1,0 +1,25 @@
+### Discovery (CoordinatorNode)
+[CoordinatorNode] Nodo registrado: ChatServer (localhost:6001) | membresia=[ChatServer, CoordinatorNode, StreamServer]
+[CoordinatorNode] Nodo registrado: StreamServer (localhost:5001) | membresia=[ChatServer, CoordinatorNode, StreamServer]
+
+### Ricart-Agrawala (StreamServer)
+[RA] StreamServer pide CS (seq=17)
+[RA] StreamServer ENTRA a CS (seq=17)
+[RA] StreamServer SALE de CS (seq=17)
+[RA] StreamServer pide CS (seq=22)
+[RA] StreamServer ENTRA a CS (seq=22)
+[RA] StreamServer SALE de CS (seq=22)
+
+### Lamport en chat (ChatServer)
+[LAMPORT=31] [ChatServer] [CHAT] canal_44 <Carga_44>: se ha unido a la carga
+[LAMPORT=40] [ChatServer] [CHAT] canal_45 <Carga_45>: se ha unido a la carga
+[LAMPORT=35] [ChatServer] [CHAT] canal_1 <Carga_1>: se ha unido a la carga
+[LAMPORT=30] [ChatServer] [CHAT] canal_33 <Carga_33>: se ha unido a la carga
+
+### Falla inducida + deteccion (StreamServer)
+[Heartbeat] Nodo CoordinatorNode marcado como FAILED (sin heartbeat por 7998ms)
+[RA] CoordinatorNode esta FAILED, se saltea
+[RA] CoordinatorNode esta FAILED, se saltea
+
+### DIE (CoordinatorNode)
+[CoordinatorNode] Recibido DIE. Apagando...
