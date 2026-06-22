@@ -4,8 +4,9 @@ Plataforma distribuida en Java que replica las funciones de Twitch (streaming + 
 
 ---
 
-## Cómo compilar
 
+## Cómo compilar
+Antes de compilar y ejecutar los servidores, verifique que realmente este adentro del proyecto.
 ```bash
 cd kwitch-cparalela
 mvn compile
